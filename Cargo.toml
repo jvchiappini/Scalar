@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/scalar_lang",
+    "crates/scalar_bridge",
+    "crates/scalar_cli",
+]
+
+[workspace.dependencies]
+logos = "0.14"
+chumsky = "0.9"
+clap = { version = "4.4", features = ["derive"] }
+# Point to the Ferrous Engine workspace
+ferrous_engine = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_engine" }
+ferrous_core = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_core" }
+glam = "0.24"
+rc = "0.1" # Wait, rc is std, but maybe some other crate? Usually just use std::rc
+# Chumsky usually doesn't need many extras.
+# Logos provides a proc macro.

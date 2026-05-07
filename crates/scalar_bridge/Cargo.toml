@@ -1,0 +1,12 @@
+[package]
+name = "scalar_bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+scalar_lang = { path = "../scalar_lang" }
+ferrous_engine = { workspace = true }
+ferrous_core = { workspace = true }
+glam = { workspace = true }
+rc = "0.1" # Wait, I'll use std::rc
+# No need for extra crates if ferrous_engine is there.

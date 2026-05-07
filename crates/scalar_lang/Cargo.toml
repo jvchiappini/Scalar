@@ -1,0 +1,11 @@
+[package]
+name = "scalar_lang"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logos = { workspace = true }
+chumsky = { workspace = true }
+glam = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"

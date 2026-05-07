@@ -1,0 +1,13 @@
+[package]
+name = "scalar_cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+scalar_lang = { path = "../scalar_lang" }
+scalar_bridge = { path = "../scalar_bridge" }
+ferrous_engine = { workspace = true }
+clap = { workspace = true }
+logos = { workspace = true }
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
