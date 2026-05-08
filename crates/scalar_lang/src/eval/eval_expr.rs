@@ -14,19 +14,23 @@ pub fn eval_expr(expr: Expr, env: &mut Environment) -> Result<Value, String> {
             }
             Ok(Value::List(values))
         },
-        Expr::Call { func, args, .. } => {
+        Expr::Call { func, args, kwargs, .. } => {
             let function = env.get(&func).ok_or_else(|| format!("Undefined function: {}", func))?;
             if let Value::NativeFunction(f) = function {
                 let mut arg_values = Vec::new();
                 for a in args {
                     arg_values.push(eval_expr(a, env)?);
                 }
-                f(arg_values)
+                let mut kwarg_values = std::collections::HashMap::new();
+                for (k, v) in kwargs {
+                    kwarg_values.insert(k, eval_expr(v, env)?);
+                }
+                f(arg_values, kwarg_values)
             } else {
                 Err(format!("'{}' is not a function", func))
             }
         },
-        Expr::MethodCall { target, method, args, .. } => {
+        Expr::MethodCall { target, method, args, kwargs, .. } => {
             let target_val = eval_expr(*target, env)?;
             
             // Try to find method in object first
@@ -44,7 +48,11 @@ pub fn eval_expr(expr: Expr, env: &mut Environment) -> Result<Value, String> {
                 for a in args {
                     arg_values.push(eval_expr(a, env)?);
                 }
-                f(arg_values)
+                let mut kwarg_values = std::collections::HashMap::new();
+                for (k, v) in kwargs {
+                    kwarg_values.insert(k, eval_expr(v, env)?);
+                }
+                f(arg_values, kwarg_values)
             } else {
                 Err(format!("'{}' is not a method", method))
             }

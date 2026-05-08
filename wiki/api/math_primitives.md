@@ -1,39 +1,28 @@
-# Arrow
-
-**Syntax:** `Arrow(x1, y1, x2, y2)`
-
-**Description:**
-Creates a vector object representing an arrow from point `(x1, y1)` to `(x2, y2)`. Includes a proportionally scaled triangular tip.
-
-**Arguments:**
-- `x1, y1` (Numbers): Origin point.
-- `x2, y2` (Numbers): Destination point (where the tip is located).
-
-**Example:**
-```scalar
-let r = Arrow(0, 0, 5, 2)
-r.set_color(1, 1, 0, 1)
-```
----
 # Axes
 
 **Syntax:** `Axes(x_min, x_max, y_min, y_max)`
 
 **Description:**
-Draws a basic coordinate axis system with arrows at the ends.
+Generates a coordinate system of axes. Returns a **Group** object that allows bulk styling of the axis lines.
 
-**Arguments:**
-- `x_min, x_max` (Numbers): X-axis range.
-- `y_min, y_max` (Numbers): Y-axis range.
+**Example:**
+```scalar
+let plano = Axes(-5, 5, -3, 3)
+plano.set_stroke(WHITE, 0.02)
+```
 
 ---
-# Path
 
-**Syntax:** `Path([[x,y], ...], thickness)`
+# Plot
+
+**Syntax:** `Plot(expression, x_min, x_max)`
 
 **Description:**
-Creates a polygonal path based on a list of points.
+Generates a path representing a mathematical function. 
+*Note: In v14, expressions should be passed as strings or implicitly as x*x in Plot.*
 
-**Arguments:**
-- `points` (List of Lists): Vertex coordinates.
-- `thickness` (Number): Line thickness.
+**Example:**
+```scalar
+let parabola = Plot("x * x", -2.0, 2.0)
+parabola.set_stroke(YELLOW, 0.05)
+```

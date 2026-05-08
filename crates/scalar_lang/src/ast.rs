@@ -13,12 +13,14 @@ pub enum Expr {
         target: Box<Expr>,
         method: String,
         args: Vec<Expr>,
+        kwargs: std::collections::HashMap<String, Expr>,
         span: Span,
     },
     /// Function call: func(args)
     Call {
         func: String,
         args: Vec<Expr>,
+        kwargs: std::collections::HashMap<String, Expr>,
         span: Span,
     },
 }

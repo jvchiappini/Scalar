@@ -6,7 +6,7 @@ use ferrous_engine::{Renderer, Transform, glam::Vec3};
 pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>) {
     // spawn_mesh(name, x, y, z) -> NodeId
     let r = renderer.clone();
-    env.define("spawn_mesh".to_string(), Value::NativeFunction(Rc::new(move |args| {
+    env.define("spawn_mesh".to_string(), Value::NativeFunction(Rc::new(move |args, _| {
         if args.len() != 4 {
              return Err("spawn_mesh expects 4 arguments: (name, x, y, z)".to_string());
         }
@@ -22,7 +22,7 @@ pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>) {
 
     // Cube(x, y, z) alias
     let r = renderer.clone();
-    env.define("Cube".to_string(), Value::NativeFunction(Rc::new(move |args| {
+    env.define("Cube".to_string(), Value::NativeFunction(Rc::new(move |args, _| {
         let x = match args.get(0) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };
         let y = match args.get(1) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };
         let z = match args.get(2) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };
@@ -32,7 +32,7 @@ pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>) {
 
     // Sphere(x, y, z, radius) alias
     let r = renderer.clone();
-    env.define("Sphere".to_string(), Value::NativeFunction(Rc::new(move |args| {
+    env.define("Sphere".to_string(), Value::NativeFunction(Rc::new(move |args, _| {
         let x = match args.get(0) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };
         let y = match args.get(1) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };
         let z = match args.get(2) { Some(Value::Number(n)) => *n as f32, _ => 0.0 };

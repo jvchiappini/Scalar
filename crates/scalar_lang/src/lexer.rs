@@ -47,6 +47,8 @@ pub enum Token {
     Dot,
     #[token(";")]
     Semi,
+    #[token(":")]
+    Colon,
 
     #[regex(r"//[^\n]*", logos::skip)]
     #[regex(r"[ \t\n\f]+", logos::skip)]

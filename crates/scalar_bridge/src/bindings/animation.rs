@@ -8,7 +8,7 @@ pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, playhead
     // wait(seconds)
     // Advances the virtual playhead.
     let ph = playhead.clone();
-    env.define("wait".to_string(), Value::NativeFunction(Rc::new(move |args| {
+    env.define("wait".to_string(), Value::NativeFunction(Rc::new(move |args, _| {
         if args.len() != 1 {
             return Err("wait() expects 1 argument: seconds".into());
         }
@@ -24,7 +24,7 @@ pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, playhead
     // Schedules an animation job starting at the current playhead position.
     let ph = playhead.clone();
     let r = renderer.clone();
-    env.define("animate".to_string(), Value::NativeFunction(Rc::new(move |args| {
+    env.define("animate".to_string(), Value::NativeFunction(Rc::new(move |args, _| {
         if args.len() < 5 {
             return Err("animate() expects 5 arguments: (node_id, property, end_val, duration, easing)".into());
         }

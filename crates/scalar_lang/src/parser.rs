@@ -29,35 +29,49 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
             .delimited_by(just(Token::LBracket), just(Token::RBracket))
             .map_with_span(|l, span| Expr::List(l, span));
 
-        let atom = val.or(list);
+        let arg = select! { Token::Ident(i) => i }
+            .then_ignore(just(Token::Colon))
+            .then(expr.clone())
+            .map(|(name, val)| (Some(name), val))
+            .or(expr.clone().map(|val| (None, val)));
+
+        let args_and_kwargs = arg
+            .separated_by(just(Token::Comma))
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map(|list| {
+                let mut positional = Vec::new();
+                let mut named = std::collections::HashMap::new();
+                for (name, val) in list {
+                    if let Some(n) = name {
+                        named.insert(n, val);
+                    } else {
+                        positional.push(val);
+                    }
+                }
+                (positional, named)
+            });
 
         let call = select! { Token::Ident(i) => i }
-            .then(
-                expr.clone()
-                    .separated_by(just(Token::Comma))
-                    .delimited_by(just(Token::LParen), just(Token::RParen))
-            )
-            .map_with_span(|(name, args), span| Expr::Call { func: name, args, span });
+            .then(args_and_kwargs.clone())
+            .map_with_span(|(name, (args, kwargs)), span| Expr::Call { func: name, args, kwargs, span });
 
+        let atom = val.or(list);
         let base = call.or(atom);
 
         // Method calls
         base.clone().then(
             just(Token::Dot)
                 .ignore_then(select! { Token::Ident(i) => i })
-                .then(
-                    expr.clone()
-                        .separated_by(just(Token::Comma))
-                        .delimited_by(just(Token::LParen), just(Token::RParen))
-                )
+                .then(args_and_kwargs)
                 .repeated()
         )
-        .foldl(|target, (method, args)| {
-            let span = target.span().start..args.last().map(|a| a.span().end).unwrap_or(target.span().end); // Approximate span
+        .foldl(|target, (method, (args, kwargs))| {
+            let span = target.span().start..target.span().end; // Optimized span
             Expr::MethodCall {
                 target: Box::new(target),
                 method,
                 args,
+                kwargs,
                 span,
             }
         })

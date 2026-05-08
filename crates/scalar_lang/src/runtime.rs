@@ -8,7 +8,7 @@ pub enum Value {
     Number(f64),
     List(Vec<Value>),
     NodeId(u32),
-    NativeFunction(Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>),
+    NativeFunction(Rc<dyn Fn(Vec<Value>, HashMap<String, Value>) -> Result<Value, String>>),
     String(String),
     Object(HashMap<String, Value>),
 }
@@ -35,8 +35,20 @@ pub struct Environment {
 impl Environment {
     /// Creates a new empty environment.
     pub fn new() -> Self {
+        let mut variables = HashMap::new();
+        
+        // v14: Predefined Standard Colors (RGBA)
+        variables.insert("WHITE".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(1.0), Value::Number(1.0), Value::Number(1.0)]));
+        variables.insert("BLACK".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(0.0), Value::Number(0.0), Value::Number(1.0)]));
+        variables.insert("RED".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(0.0), Value::Number(0.0), Value::Number(1.0)]));
+        variables.insert("GREEN".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)]));
+        variables.insert("BLUE".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)]));
+        variables.insert("YELLOW".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)]));
+        variables.insert("CYAN".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(1.0), Value::Number(1.0), Value::Number(1.0)]));
+        variables.insert("MAGENTA".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)]));
+
         Self {
-            variables: HashMap::new(),
+            variables,
             parent: None,
         }
     }
