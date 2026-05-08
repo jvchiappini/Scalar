@@ -10,6 +10,7 @@ pub enum Value {
     NodeId(u32),
     NativeFunction(Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>),
     String(String),
+    Object(HashMap<String, Value>),
 }
 
 impl fmt::Debug for Value {
@@ -20,6 +21,7 @@ impl fmt::Debug for Value {
             Value::NodeId(id) => write!(f, "NodeId({})", id),
             Value::NativeFunction(_) => write!(f, "NativeFunction"),
             Value::String(s) => write!(f, "String({})", s),
+            Value::Object(o) => write!(f, "Object({:?})", o.keys()),
         }
     }
 }

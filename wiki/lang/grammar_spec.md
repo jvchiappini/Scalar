@@ -16,6 +16,7 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 - **Variable Declaration**: `let x = 10;`
 - **For Loop**: `for i in 0..10 { ... }`
 - **Method Call**: `object.method(args);`
+- **Import**: `import "filename.scl";` (Merges functions and variables with the current scope)
 
 ### Methods & Animation
 - `animate(property, target, duration, easing)`: Schedules an animation job.

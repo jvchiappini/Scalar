@@ -11,6 +11,7 @@ use ferrous_engine::Renderer;
 /// binding registration to specialized submodules in [`bindings`].
 pub struct Bridge {
     pub renderer: Rc<RefCell<Renderer>>,
+    pub playhead: Rc<RefCell<f64>>,
 }
 
 impl Bridge {
@@ -18,6 +19,7 @@ impl Bridge {
     pub fn new(renderer: Renderer) -> Self {
         Self {
             renderer: Rc::new(RefCell::new(renderer)),
+            playhead: Rc::new(RefCell::new(0.0)),
         }
     }
 
@@ -30,8 +32,9 @@ impl Bridge {
     /// bridge.register_functions(&mut env);
     /// ```
     pub fn register_functions(&self, env: &mut Environment) {
-        bindings::animation::register(env, self.renderer.clone());
+        bindings::animation::register(env, self.renderer.clone(), self.playhead.clone());
         bindings::mesh::register(env, self.renderer.clone());
-        bindings::shapes::register(env, self.renderer.clone());
+        bindings::shapes::register(env, self.renderer.clone(), self.playhead.clone());
+        bindings::camera::register(env, self.renderer.clone());
     }
 }

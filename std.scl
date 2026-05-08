@@ -1,0 +1,53 @@
+// Scalar Standard Library (std.scl)
+// Core constants and helper functions
+
+let PI = 3.14159265;
+let TAU = 6.28318531;
+
+// --- Geometry Primitives ---
+
+fn Arrow(x1, y1, x2, y2) {
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let len = (dx*dx + dy*dy)^0.5;
+    
+    let l = Line(x1, y1, x2, y2, 0.05);
+    
+    if (len > 0.1) {
+        let ux = dx / len;
+        let uy = dy / len;
+        let vx = -uy;
+        let vy = ux;
+        
+        let hs = 0.25;
+        let hw = 0.15;
+        
+        // Triangle head
+        let p1x = x2 - ux * hs + vx * hw;
+        let p1y = y2 - uy * hs + vy * hw;
+        let p2x = x2 - ux * hs - vx * hw;
+        let p2y = y2 - uy * hs - vy * hw;
+        
+        let head = Path([[x2, y2], [p1x, p1y], [p2x, p2y], [x2, y2]], 0.02);
+        head.set_fill(1, 1, 1, 1);
+    }
+    return l;
+}
+
+fn Axes(x_min, x_max, y_min, y_max) {
+    let x_axis = Arrow(x_min, 0, x_max, 0);
+    let y_axis = Arrow(0, y_min, 0, y_max);
+    x_axis.set_color(0.5, 0.5, 0.5, 1);
+    y_axis.set_color(0.5, 0.5, 0.5, 1);
+}
+
+fn Plot(f, x_min, x_max, step) {
+    let pts = [];
+    let x = x_min;
+    while (x <= x_max) {
+        let y = f(x);
+        pts.push([x, y]);
+        x = x + step;
+    }
+    return Path(pts, 0.05);
+}

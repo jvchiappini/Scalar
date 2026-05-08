@@ -11,3 +11,9 @@ clap = { workspace = true }
 logos = { workspace = true }
 anyhow = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+notify = "6.1"
+ariadne = "0.4"
+chumsky = { workspace = true }
+winit = "0.29"
+ferrous_core = { path = "../../../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_core" }
+ferrous_ecs = { path = "../../../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_ecs" }

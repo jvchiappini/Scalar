@@ -28,5 +28,24 @@ pub fn eval_stmt(stmt: Stmt, env: &mut Environment) -> Result<Value, String> {
             }
         },
         Stmt::Expr(e) => eval_expr(e, env),
+        Stmt::Import(path, ..) => {
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| format!("Failed to read import '{}': {}", path, e))?;
+            
+            use logos::Logos;
+            let tokens: Vec<_> = crate::lexer::Token::lexer(&content)
+                .spanned()
+                .filter_map(|(t, s)| t.ok().map(|token| (token, s)))
+                .collect();
+
+            let ast = crate::parser::parse(tokens)
+                .map_err(|e| format!("Failed to parse import '{}': {:?}", path, e))?;
+
+            let mut last_val = Value::Number(0.0);
+            for s in ast.statements {
+                last_val = eval_stmt(s, env)?;
+            }
+            Ok(last_val)
+        }
     }
 }

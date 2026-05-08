@@ -51,6 +51,7 @@ pub enum Stmt {
         span: Span,
     },
     Expr(Expr),
+    Import(String, Span),
 }
 
 /// Abstract Syntax Tree node for Scalar.

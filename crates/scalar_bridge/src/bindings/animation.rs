@@ -4,11 +4,7 @@ use scalar_lang::runtime::{Environment, Value};
 use ferrous_engine::{Renderer, Animator, AnimJob, EasingType, Transform, MaterialComponent};
 
 /// Registers the animation sequencer bindings.
-pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>) {
-    // The playhead represents the "current time" for the script execution (declaration phase).
-    // It is shared among all animation bindings.
-    let playhead = Rc::new(RefCell::new(0.0));
-
+pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, playhead: Rc<RefCell<f64>>) {
     // wait(seconds)
     // Advances the virtual playhead.
     let ph = playhead.clone();
@@ -89,6 +85,8 @@ pub fn register(env: &mut Environment, renderer: Rc<RefCell<Renderer>>) {
             start_time,
             duration,
             easing,
+            path_start: None,
+            path_target: None,
         };
 
         if let Some(mut animator) = world.get_mut::<Animator>(entity) {

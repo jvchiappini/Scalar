@@ -28,7 +28,16 @@ pub fn eval_expr(expr: Expr, env: &mut Environment) -> Result<Value, String> {
         },
         Expr::MethodCall { target, method, args, .. } => {
             let target_val = eval_expr(*target, env)?;
-            let function = env.get(&method).ok_or_else(|| format!("Undefined method: {}", method))?;
+            
+            // Try to find method in object first
+            let function = if let Value::Object(ref o) = target_val {
+                o.get(&method).cloned()
+            } else {
+                None
+            };
+            
+            let function = function.or_else(|| env.get(&method))
+                .ok_or_else(|| format!("Undefined method: {}", method))?;
             
             if let Value::NativeFunction(f) = function {
                 let mut arg_values = vec![target_val];

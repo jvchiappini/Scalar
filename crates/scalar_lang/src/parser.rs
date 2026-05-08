@@ -84,11 +84,16 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
             )
             .map_with_span(|(((var, start), end), body), span| Stmt::For { var, start, end, body, span });
 
+        let import_stmt = just(Token::Import)
+            .ignore_then(select! { Token::String(s) => s })
+            .then_ignore(just(Token::Semi).or_not())
+            .map_with_span(|path, span| Stmt::Import(path, span));
+
         let expr_stmt = expr.clone()
             .then_ignore(just(Token::Semi).or_not())
             .map(Stmt::Expr);
 
-        let_stmt.or(for_stmt).or(expr_stmt)
+        let_stmt.or(for_stmt).or(import_stmt).or(expr_stmt)
     });
 
     stmt.repeated()
