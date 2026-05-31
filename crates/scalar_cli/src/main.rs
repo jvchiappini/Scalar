@@ -97,12 +97,19 @@ fn main() -> anyhow::Result<()> {
 
     // ── Launch ffmpeg ────────────────────────────────────────────
     let ffmpeg_args: Vec<String> = vec![
-        "-y".into(), "-f".into(), "rawvideo".into(), "-vcodec".into(), "rawvideo".into(),
+        "-y".into(), 
+        // Read uncompressed raw video fast
+        "-hwaccel".into(), "auto".into(),
+        "-f".into(), "rawvideo".into(), "-vcodec".into(), "rawvideo".into(),
         "-s".into(), format!("{}x{}", w, h),
         "-pix_fmt".into(), "rgba".into(),
         "-r".into(), output_fps.to_string(),
         "-i".into(), "-".into(),
-        "-c:v".into(), "libx264".into(), "-pix_fmt".into(), "yuv420p".into(),
+        // Hardware encoder if possible, or fallback to fast x264 with minimal memory footprint
+        "-c:v".into(), "libx264".into(), 
+        "-preset".into(), "ultrafast".into(), // crucial for 8GB RAM machines at 4K
+        "-threads".into(), "4".into(),        // limit x264 memory overhead per thread
+        "-pix_fmt".into(), "yuv420p".into(),
         args.output.clone(),
     ];
 
@@ -117,10 +124,8 @@ fn main() -> anyhow::Result<()> {
     // All buffers are pre-allocated and recycled to avoid malloc/free churn.
     let buf_size = (w * h * 4) as usize;
 
-    // Sub-sample render buffers (reused across all output frames)
-    let mut render_bufs: Vec<Vec<u8>> = (0..sub_samples)
-        .map(|_| Vec::with_capacity(buf_size))
-        .collect();
+    // Scratch buffer for motion blur sub-frames (reused)
+    let mut scratch_buf: Vec<u8> = Vec::with_capacity(buf_size);
 
     // Accumulation buffer (u32 to avoid overflow when summing)
     let mut accum: Vec<u32> = Vec::with_capacity(buf_size);
@@ -174,16 +179,15 @@ fn main() -> anyhow::Result<()> {
 
                 bridge.before_frame(time);
 
-                let pix_buf = &mut render_bufs[sample as usize];
-                pix_buf.clear();
-                let rendered = bridge.renderer.borrow_mut().render_frame_into(time, pix_buf);
+                scratch_buf.clear();
+                let rendered = bridge.renderer.borrow_mut().render_frame_into(time, &mut scratch_buf);
 
                 if !rendered { continue; }
 
                 if sample == 0 {
-                    accum.extend(pix_buf.iter().map(|&p| p as u32));
+                    accum.extend(scratch_buf.iter().map(|&p| p as u32));
                 } else {
-                    for (a, &p) in accum.iter_mut().zip(pix_buf.iter()) {
+                    for (a, &p) in accum.iter_mut().zip(scratch_buf.iter()) {
                         *a += p as u32;
                     }
                 }
