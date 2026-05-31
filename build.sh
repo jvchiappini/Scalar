@@ -22,7 +22,7 @@ mkdir -p "$DIST_DIR"
 cp target/x86_64-pc-windows-gnu/release/scalar_cli.exe "$DIST_DIR/"
 
 # Copiar el script de animación de prueba
-cp test_animation.scl "$DIST_DIR/"
+#cp test_animation.scl "$DIST_DIR/"
 
 # 4. Crear el archivo ZIP
 echo "🗜️ Creando archivo ZIP..."

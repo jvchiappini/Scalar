@@ -7,6 +7,5 @@ edition = "2021"
 scalar_lang = { path = "../scalar_lang" }
 ferrous_engine = { workspace = true }
 ferrous_core = { workspace = true }
-glam = { workspace = true }
-rc = "0.1" # Wait, I'll use std::rc
-# No need for extra crates if ferrous_engine is there.
+ferrous_2d = { workspace = true }
+anyhow = "1.0"

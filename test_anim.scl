@@ -1,0 +1,46 @@
+// Animated Axes + Plot demo — 4K 240fps con motion blur
+// Run: cargo run -p scalar_cli -- --script test_anim.scl --duration 5 --out anim_4k_240fps.mp4
+
+Resolution(3840, 2160)
+Background(0.05, 0.05, 0.1)
+
+// 240 fps for ultra-smooth animation
+SetFPS(240)
+
+// Motion blur with 4 sub-samples per frame
+MotionBlur(4)
+
+// Animated axes: all elements (axis lines, ticks, grid, arrows) draw in parallel
+Axes(-6, 6, -3, 3,
+     grid: true,
+     tick_step: 1.0,
+     animate: true,
+     anim_duration: 1.5,
+     anim_easing: "ease_out_cubic")
+
+// Animated plot: segments stagger, drawing the curve from left to right
+Plot("sin(x)", -6, 6,
+     samples: 300,
+     thickness: 3,
+     color: [1, 0.3, 0.3, 1],
+     animate: true,
+     anim_duration: 3.0,
+     anim_easing: "ease_out_cubic")
+
+// Second plot with different easing
+Plot("cos(x)", -6, 6,
+     samples: 300,
+     thickness: 3,
+     color: [0.3, 0.6, 1, 1],
+     animate: true,
+     anim_duration: 3.0,
+     anim_easing: "ease_in_out_quart")
+
+// Third plot: polynomial with bounce easing
+Plot("x^3/18", -4, 4,
+     samples: 200,
+     thickness: 3.5,
+     color: [0.3, 1, 0.3, 1],
+     animate: true,
+     anim_duration: 3.5,
+     anim_easing: "ease_out_bounce")

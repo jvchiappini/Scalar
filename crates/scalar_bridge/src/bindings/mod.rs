@@ -1,4 +1,4 @@
-pub mod animation;
-pub mod mesh;
+pub mod project;
 pub mod shapes;
-pub mod camera;
+pub mod animation;
+pub mod primitives;

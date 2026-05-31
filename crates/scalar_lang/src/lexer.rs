@@ -45,6 +45,8 @@ pub enum Token {
     Eq,
     #[token(".")]
     Dot,
+    #[token("-")]
+    Minus,
     #[token(";")]
     Semi,
     #[token(":")]
@@ -68,5 +70,21 @@ impl<'a> Lexer<'a> {
         Self {
             inner: Token::lexer(input),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use logos::Logos;
+
+    #[test]
+    fn test_lex() {
+        let script = "Resolution(1920, 1080)\nBackground(0.05, 0.05, 0.1)\nLine(-300, 0, 300, 0, 20, 1.0, 0.0, 0.0)";
+        let mut lex = Token::lexer(script);
+        for (t, s) in lex.spanned() {
+            println!("{:?} {:?}", t, s);
+        }
+        panic!("Show output");
     }
 }

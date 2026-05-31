@@ -2,240 +2,66 @@ use clap::Parser;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::thread;
 use scalar_bridge::Bridge;
-use ferrous_engine::{App, AppContext, FerrousApp, Renderer};
-use notify::{Watcher, RecursiveMode, Event};
-use std::sync::mpsc::{channel, Receiver};
-use ariadne::{Color as AriadneColor, Label, Report, ReportKind, Source};
-use chumsky::error::Simple;
 use logos::Logos;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Input .scl script file
     #[arg(short, long)]
     input: String,
 
+    /// Output video file (mp4)
     #[arg(short, long, default_value = "output.mp4")]
     output: String,
 
+    /// Frames per second (default, overridable via SetFPS() in script)
     #[arg(short, long, default_value_t = 60)]
     fps: u32,
 
+    /// Duration in seconds
     #[arg(short, long, default_value_t = 5.0)]
     duration: f64,
 
-    #[arg(short, long, default_value_t = false)]
-    preview: bool,
+    /// Render width (default 1920)
+    #[arg(long, default_value_t = 1920)]
+    width: u32,
+
+    /// Render height (default 1080)
+    #[arg(long, default_value_t = 1080)]
+    height: u32,
 }
 
 fn find_std_scl() -> Option<PathBuf> {
     let current_dir = std::env::current_dir().ok()?;
     let p1 = current_dir.join("std.scl");
     if p1.exists() { return Some(p1); }
-    
     let exec_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     let p2 = exec_dir.join("std.scl");
     if p2.exists() { return Some(p2); }
-    
     None
-}
-
-fn report_error(src: &str, filename: &str, errors: Vec<Simple<scalar_lang::lexer::Token>>) {
-    for error in errors {
-        let span = error.span();
-        Report::build(ReportKind::Error, filename, span.start)
-            .with_message(format!("{:?}", error))
-            .with_label(
-                Label::new((filename, span))
-                    .with_message("Found here")
-                    .with_color(AriadneColor::Red),
-            )
-            .finish()
-            .eprint((filename, Source::from(src)))
-            .unwrap();
-    }
-}
-
-struct ScalarPreviewApp {
-    input_path: String,
-    rx: Receiver<notify::Result<Event>>,
-    needs_reload: bool,
-    start_time: std::time::Instant,
-    headless_bridge: Option<Bridge>,
-}
-
-impl FerrousApp for ScalarPreviewApp {
-    fn setup(&mut self, ctx: &mut AppContext<'_>) {
-        println!("Live Preview active for: {}", self.input_path);
-        
-        // Initialize persistent headless bridge exactly once to avoid WGPU Device leaks
-        let renderer = Renderer::builder()
-            .with_dimensions(ctx.width(), ctx.height())
-            .with_headless_mode(true)
-            .build()
-            .unwrap();
-            
-        self.headless_bridge = Some(Bridge::new(renderer));
-        
-        self.reload(ctx);
-    }
-
-    fn update(&mut self, ctx: &mut AppContext<'_>) {
-        while let Ok(Ok(event)) = self.rx.try_recv() {
-            if event.kind.is_modify() {
-                self.needs_reload = true;
-            }
-        }
-
-        if self.needs_reload {
-            self.reload(ctx);
-            self.start_time = std::time::Instant::now();
-            self.needs_reload = false;
-        }
-
-        // Advance time for animations!
-        let t = self.start_time.elapsed().as_secs_f64();
-        let mut resources = ferrous_ecs::prelude::ResourceMap::new();
-        resources.insert(ferrous_core::Time {
-            delta: 0.0,
-            elapsed: t,
-            frame_count: 0,
-            fps: 0.0,
-        });
-
-        // Run the AnimatorSystem over the live world so the timeline plays
-        let mut animator = ferrous_core::scene::AnimatorSystem;
-        ferrous_ecs::system::System::run(&mut animator, &mut ctx.world.ecs, &mut resources);
-    }
-}
-
-impl ScalarPreviewApp {
-    fn reload(&mut self, ctx: &mut AppContext<'_>) {
-        let content = match fs::read_to_string(&self.input_path) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Failed to read {}: {}", self.input_path, e);
-                return;
-            }
-        };
-
-        let tokens: Vec<_> = scalar_lang::lexer::Token::lexer(&content).spanned()
-            .filter_map(|(t, s)| t.ok().map(|token| (token, s))).collect();
-
-        let ast = match scalar_lang::parse(tokens) {
-            Ok(ast) => ast,
-            Err(e) => {
-                report_error(&content, &self.input_path, e);
-                return;
-            }
-        };
-
-        // Free old materials before clearing App scene
-        let mut to_free = Vec::new();
-        for (_e, mc) in ctx.world.ecs.query::<ferrous_core::scene::MaterialComponent>() {
-            if mc.handle.0 != 0 {
-                to_free.push(mc.handle);
-            }
-        }
-        let r = ctx.render.renderer_mut();
-        for handle in to_free {
-            r.material_registry.free(handle);
-        }
-
-        // Clear App scene
-        ctx.world.clear();
-
-        // Evaluate the AST using the persistent headless bridge
-        let bridge = self.headless_bridge.as_ref().unwrap();
-        bridge.renderer.borrow_mut().clear(); // Clear headless scene
-
-        let mut env = scalar_lang::Environment::new();
-        bridge.register_functions(&mut env);
-
-        if let Some(std_path) = find_std_scl() {
-            if let Ok(std_content) = fs::read_to_string(std_path) {
-                let std_tokens: Vec<_> = scalar_lang::lexer::Token::lexer(&std_content).spanned()
-                    .filter_map(|(t, s)| t.ok().map(|token| (token, s))).collect();
-                if let Ok(std_ast) = scalar_lang::parse(std_tokens) {
-                    let _ = scalar_lang::evaluate(std_ast, &mut env);
-                }
-            }
-        }
-
-        if let Err(e) = scalar_lang::evaluate(ast, &mut env) {
-             eprintln!("Eval Error: {}", e);
-        }
-
-        // Final sync: Copy results from bridge to App
-        let b = bridge.renderer.borrow_mut();
-        
-        ctx.render.renderer_mut().camera_system.camera = b.gpu.camera_system.camera.clone();
-        ctx.world.ecs = b.world.ecs.clone();
-
-        // Fix cross-device MaterialHandles: 
-        // 1. App's renderer doesn't have the materials created by the headless renderer.
-        // 2. We must allocate new bind groups natively in the App's WGPU device.
-        let r = ctx.render.renderer_mut();
-        r.world_material_descs.clear();
-        r.shape_batcher.clear();
-
-        let mut old_to_new = std::collections::HashMap::new();
-
-        let entities: Vec<_> = ctx.world.ecs.query::<ferrous_core::scene::MaterialComponent>().map(|(e, _)| e).collect();
-        for entity in entities {
-            let mut desc_clone = None;
-            if let Some(mut mc) = ctx.world.ecs.get_mut::<ferrous_core::scene::MaterialComponent>(entity) {
-                let old_handle = mc.handle.0;
-                if old_handle != 0 {
-                    let new_handle = if let Some(&h) = old_to_new.get(&old_handle) {
-                        h
-                    } else {
-                        let h = r.material_registry.create(&r.context.device, &r.context.queue, &mc.descriptor);
-                        old_to_new.insert(old_handle, h);
-                        h
-                    };
-                    mc.handle = new_handle;
-                }
-                desc_clone = Some(mc.descriptor.clone());
-            }
-
-            if let Some(d) = desc_clone {
-                r.world_material_descs.insert(entity.to_bits(), d);
-            }
-        }
-        
-        println!("Hot-reload complete. Timeline restarted.");
-    }
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    if args.preview {
-        run_preview(args)
-    } else {
-        run_headless(args)
-    }
-}
-
-fn run_headless(args: Args) -> anyhow::Result<()> {
+    // ── Parse the script ──────────────────────────────────────────
     let content = fs::read_to_string(&args.input)?;
     let tokens: Vec<_> = scalar_lang::lexer::Token::lexer(&content).spanned()
         .filter_map(|(t, s)| t.ok().map(|token| (token, s))).collect();
-    let ast = scalar_lang::parse(tokens).map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
+    let ast = scalar_lang::parse(tokens)
+        .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
-    let renderer = Renderer::builder()
-        .with_dimensions(1920, 1080)
-        .with_headless_mode(true)
-        .with_fps(args.fps)
-        .build()?;
-
-    let bridge = Bridge::new(renderer);
+    // ── Initialise renderer (Pure2D headless) ─────────────────────
+    let bridge = Bridge::new(args.width, args.height, args.fps)?;
     let mut env = scalar_lang::Environment::new();
     bridge.register_functions(&mut env);
 
+    // ── Evaluate std library (if present) ────────────────────────
     if let Some(std_path) = find_std_scl() {
         if let Ok(std_content) = fs::read_to_string(std_path) {
             let std_tokens: Vec<_> = scalar_lang::lexer::Token::lexer(&std_content).spanned()
@@ -246,48 +72,153 @@ fn run_headless(args: Args) -> anyhow::Result<()> {
         }
     }
 
-    scalar_lang::evaluate(ast, &mut env).map_err(|e| anyhow::anyhow!("Eval error: {}", e))?;
+    // ── Run user script ───────────────────────────────────────────
+    scalar_lang::evaluate(ast, &mut env)
+        .map_err(|e| anyhow::anyhow!("Eval error: {}", e))?;
+
+    // ── Read settings set by script ───────────────────────────────
+    let (w, h) = {
+        let r = bridge.renderer.borrow();
+        (r.width(), r.height())
+    };
+    let output_fps = *bridge.fps.borrow();
+    let motion_blur = *bridge.motion_blur_samples.borrow();
+    let sub_samples = if motion_blur > 0 { motion_blur } else { 1 };
+
+    let output_frame_dt = 1.0 / output_fps as f64;
+    let sub_frame_dt = output_frame_dt / sub_samples as f64;
+    let total_output_frames = (args.duration * output_fps as f64) as u64;
+
+    eprintln!("  Resolution: {}×{}", w, h);
+    eprintln!("  FPS: {} output × {} sub-samples = {} renders/sec",
+        output_fps, sub_samples, output_fps * sub_samples);
+    eprintln!("  Duration: {}s → {} frames",
+        args.duration, total_output_frames);
+
+    // ── Launch ffmpeg ────────────────────────────────────────────
+    let ffmpeg_args: Vec<String> = vec![
+        "-y".into(), "-f".into(), "rawvideo".into(), "-vcodec".into(), "rawvideo".into(),
+        "-s".into(), format!("{}x{}", w, h),
+        "-pix_fmt".into(), "rgba".into(),
+        "-r".into(), output_fps.to_string(),
+        "-i".into(), "-".into(),
+        "-c:v".into(), "libx264".into(), "-pix_fmt".into(), "yuv420p".into(),
+        args.output.clone(),
+    ];
 
     let mut ffmpeg = Command::new("ffmpeg")
-        .args([
-            "-y", "-f", "rawvideo", "-vcodec", "rawvideo", "-s", "1920x1080",
-            "-pix_fmt", "rgba", "-r", &args.fps.to_string(), "-i", "-",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", &args.output,
-        ])
+        .args(&ffmpeg_args)
         .stdin(Stdio::piped())
         .spawn()?;
 
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open ffmpeg stdin");
-    let total_frames = (args.duration * args.fps as f64) as u64;
-    for frame_idx in 0..total_frames {
-        let time = frame_idx as f64 / args.fps as f64;
-        let mut r = bridge.renderer.borrow_mut();
-        if let Some(pixels) = r.render_frame(time) {
-            stdin.write_all(&pixels)?;
+
+    // ── Buffer pool ──────────────────────────────────────────────
+    // All buffers are pre-allocated and recycled to avoid malloc/free churn.
+    let buf_size = (w * h * 4) as usize;
+
+    // Sub-sample render buffers (reused across all output frames)
+    let mut render_bufs: Vec<Vec<u8>> = (0..sub_samples)
+        .map(|_| Vec::with_capacity(buf_size))
+        .collect();
+
+    // Accumulation buffer (u32 to avoid overflow when summing)
+    let mut accum: Vec<u32> = Vec::with_capacity(buf_size);
+
+    // Pool of output buffers shared between render & writer threads
+    let (write_tx, write_rx) = mpsc::sync_channel::<Vec<u8>>(4);
+
+    // Writer thread: reads from channel, writes to ffmpeg, returns buffer to pool
+    let (return_tx, return_rx) = mpsc::channel::<Vec<u8>>();
+    let return_tx_thread = return_tx.clone();
+    let writer_handle = thread::spawn(move || {
+        for mut buf in write_rx {
+            if stdin.write_all(&buf).is_err() { break; }
+            buf.clear();
+            // Return buffer to pool for reuse
+            let _ = return_tx_thread.send(buf);
+        }
+    });
+
+    // Pre-fill the pool with some empty buffers
+    for _ in 0..4 {
+        let _ = return_tx.send(Vec::with_capacity(buf_size));
+    }
+
+    // ── Render loop ──────────────────────────────────────────────
+    let start_time = std::time::Instant::now();
+    let mut total_renders: u64 = 0;
+
+    for frame_idx in 0..total_output_frames {
+        if motion_blur == 0 {
+            // ── No motion blur: one render per output frame ─────
+            let time = frame_idx as f64 / output_fps as f64;
+            bridge.before_frame(time);
+
+            // Get a fresh buffer from pool
+            let mut out = return_rx.recv().unwrap_or_else(|_| Vec::with_capacity(buf_size));
+            out.clear();
+
+            let rendered = bridge.renderer.borrow_mut().render_frame_into(time, &mut out);
+            if rendered {
+                if write_tx.send(out).is_err() { break; }
+            }
+            total_renders += 1;
+        } else {
+            // ── Motion blur: render sub-frames and average ──────
+            accum.clear();
+
+            for sample in 0..sub_samples {
+                let sub_idx = frame_idx * sub_samples as u64 + sample as u64;
+                let time = sub_idx as f64 * sub_frame_dt;
+
+                bridge.before_frame(time);
+
+                let pix_buf = &mut render_bufs[sample as usize];
+                pix_buf.clear();
+                let rendered = bridge.renderer.borrow_mut().render_frame_into(time, pix_buf);
+
+                if !rendered { continue; }
+
+                if sample == 0 {
+                    accum.extend(pix_buf.iter().map(|&p| p as u32));
+                } else {
+                    for (a, &p) in accum.iter_mut().zip(pix_buf.iter()) {
+                        *a += p as u32;
+                    }
+                }
+                total_renders += 1;
+            }
+
+            // Get output buffer from pool
+            let mut out = return_rx.recv().unwrap_or_else(|_| Vec::with_capacity(buf_size));
+            out.clear();
+
+            let div = sub_samples as u32;
+            out.extend(accum.iter().map(|&v| (v / div) as u8));
+
+            if write_tx.send(out).is_err() { break; }
+        }
+
+        // Progress indicator every second
+        if frame_idx % (output_fps as u64) == 0 && frame_idx > 0 {
+            let elapsed = start_time.elapsed();
+            let pct = frame_idx as f64 / total_output_frames as f64 * 100.0;
+            let total_est = elapsed / frame_idx as u32 * total_output_frames as u32;
+            eprintln!("  {:3.0}% — {} renders in {:.1}s (est {:.1}s)",
+                pct, total_renders, elapsed.as_secs_f64(), total_est.as_secs_f64());
         }
     }
-    drop(stdin);
+
+    let elapsed = start_time.elapsed();
+    eprintln!("  100% — {} renders in {:.1}s ({:.0} renders/sec, {:.1} MPixels/sec)",
+        total_renders, elapsed.as_secs_f64(),
+        total_renders as f64 / elapsed.as_secs_f64(),
+        total_renders as f64 * (w * h) as f64 / elapsed.as_secs_f64() / 1_000_000.0);
+
+    drop(write_tx);
+    writer_handle.join().unwrap();
     ffmpeg.wait()?;
-    Ok(())
-}
-
-fn run_preview(args: Args) -> anyhow::Result<()> {
-    let (tx, rx) = channel();
-    let mut watcher = notify::recommended_watcher(tx)?;
-    watcher.watch(Path::new(&args.input), RecursiveMode::NonRecursive)?;
-
-    let app = ScalarPreviewApp {
-        input_path: args.input,
-        rx,
-        needs_reload: false,
-        start_time: std::time::Instant::now(),
-        headless_bridge: None,
-    };
-
-    App::new(app)
-        .with_title("Scalar Live Preview")
-        .with_size(1280, 720)
-        .run();
-
+    println!("Done → {}", args.output);
     Ok(())
 }

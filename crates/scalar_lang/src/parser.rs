@@ -56,7 +56,15 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
             .map_with_span(|(name, (args, kwargs)), span| Expr::Call { func: name, args, kwargs, span });
 
         let atom = val.or(list);
-        let base = call.or(atom);
+        
+        let unary = just(Token::Minus).repeated()
+            .then(call.or(atom))
+            .foldr(|_op, target| {
+                let span = target.span();
+                Expr::UnaryMinus(Box::new(target), span)
+            });
+
+        let base = unary;
 
         // Method calls
         base.clone().then(

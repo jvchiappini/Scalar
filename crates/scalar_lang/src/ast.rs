@@ -7,6 +7,7 @@ pub enum Expr {
     Number(f64, Span),
     Ident(String, Span),
     String(String, Span),
+    UnaryMinus(Box<Expr>, Span),
     List(Vec<Expr>, Span),
     /// Method call: target.method(args)
     MethodCall {
@@ -31,6 +32,7 @@ impl Expr {
             Expr::Number(_, s) => s.clone(),
             Expr::Ident(_, s) => s.clone(),
             Expr::String(_, s) => s.clone(),
+            Expr::UnaryMinus(_, s) => s.clone(),
             Expr::List(_, s) => s.clone(),
             Expr::MethodCall { span, .. } => span.clone(),
             Expr::Call { span, .. } => span.clone(),

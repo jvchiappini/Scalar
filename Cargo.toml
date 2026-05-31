@@ -10,9 +10,11 @@ members = [
 logos = "0.14"
 chumsky = "0.9"
 clap = { version = "4.4", features = ["derive"] }
-# Point to the Ferrous Engine workspace
+# Ferrous Engine (renderer)
 ferrous_engine = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_engine" }
 ferrous_core = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_core" }
+ferrous_2d = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_2d" }
+
 glam = "0.24"
 rc = "0.1" # Wait, rc is std, but maybe some other crate? Usually just use std::rc
 # Chumsky usually doesn't need many extras.

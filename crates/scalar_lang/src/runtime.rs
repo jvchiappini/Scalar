@@ -6,6 +6,7 @@ use std::fmt;
 #[derive(Clone)]
 pub enum Value {
     Number(f64),
+    Boolean(bool),
     List(Vec<Value>),
     NodeId(u32),
     NativeFunction(Rc<dyn Fn(Vec<Value>, HashMap<String, Value>) -> Result<Value, String>>),
@@ -17,6 +18,7 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Number(n) => write!(f, "Number({})", n),
+            Value::Boolean(b) => write!(f, "Boolean({})", b),
             Value::List(l) => write!(f, "List({:?})", l),
             Value::NodeId(id) => write!(f, "NodeId({})", id),
             Value::NativeFunction(_) => write!(f, "NativeFunction"),
@@ -46,6 +48,8 @@ impl Environment {
         variables.insert("YELLOW".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)]));
         variables.insert("CYAN".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(1.0), Value::Number(1.0), Value::Number(1.0)]));
         variables.insert("MAGENTA".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)]));
+        variables.insert("true".to_string(), Value::Boolean(true));
+        variables.insert("false".to_string(), Value::Boolean(false));
 
         Self {
             variables,

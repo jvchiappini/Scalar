@@ -7,6 +7,14 @@ pub fn eval_expr(expr: Expr, env: &mut Environment) -> Result<Value, String> {
         Expr::Number(n, _) => Ok(Value::Number(n)),
         Expr::Ident(name, _) => env.get(&name).ok_or_else(|| format!("Undefined variable: {}", name)),
         Expr::String(s, _) => Ok(Value::String(s)),
+        Expr::UnaryMinus(target, _) => {
+            let val = eval_expr(*target, env)?;
+            if let Value::Number(n) = val {
+                Ok(Value::Number(-n))
+            } else {
+                Err("Unary minus can only be applied to numbers".to_string())
+            }
+        },
         Expr::List(exprs, _) => {
             let mut values = Vec::new();
             for e in exprs {
