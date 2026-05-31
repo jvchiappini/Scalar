@@ -2702,6 +2702,7 @@ dependencies = [
  "ferrous_engine",
  "ferrous_font",
  "scalar_lang",
+ "ttf-parser 0.25.1",
 ]
 
 [[package]]

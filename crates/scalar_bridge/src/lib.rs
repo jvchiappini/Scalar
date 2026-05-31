@@ -54,9 +54,13 @@ impl Bridge {
             .build()
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        // Default to Pure 2D — no 3D world sync, orthographic camera.
-        renderer.gpu.mode = RendererMode::Pure2D;
-        renderer.gpu.enable_pure_2d(ferrous_engine::wgpu::Color::BLACK);
+        // Use Full3D so `sync_world` runs and lyon_tessellation processes Path elements.
+        // Pure2D skips the WorldPass and uses a simple batcher that draws beziers as straight lines.
+        renderer.gpu.mode = RendererMode::Full3D;
+        renderer.gpu.camera_system.camera.set_mode_2d(true, Some(height as f32));
+        renderer.gpu.camera_system.camera.set_aspect(width as f32 / height as f32);
+        renderer.gpu.set_background_color(ferrous_engine::wgpu::Color::BLACK);
+        renderer.gpu.camera_system.set_tonemapping_enabled(&renderer.gpu.context.queue, false);
 
         Ok(Self {
             renderer: Rc::new(RefCell::new(renderer)),

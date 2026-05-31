@@ -31,10 +31,9 @@ use ferrous_engine::glam::Vec2;
 use ferrous_core::scene::world::types::PathCommand;
 use crate::bindings::shapes::{self, num, kwarg_num};
 
-/// Internal: Stores the font parser data for text-to-path rendering.
+/// Internal: stores raw TTF/OTF bytes for text-to-path rendering via ttf-parser.
 pub struct FontEntry {
-    /// The TrueType/OpenType font parser.
-    pub parser: ferrous_font::parser::FontParser,
+    pub bytes: Vec<u8>,
 }
 
 /// Registers SVGImport, FontImport, and Text into the Scalar environment.
@@ -313,19 +312,20 @@ fn register_font_import(env: &mut Environment, fonts: Rc<RefCell<Vec<FontEntry>>
                 _ => return Err("FontImport(path): first argument must be a string path".to_string()),
             };
 
-            let font_bytes = match std::fs::read(&path) {
+            let bytes = match std::fs::read(&path) {
                 Ok(b) => b,
                 Err(e) => return Err(format!("FontImport: failed to read '{}': {}", path, e)),
             };
 
-            let parser = match ferrous_font::parser::FontParser::new(font_bytes) {
-                Ok(p) => p,
-                Err(e) => return Err(format!("FontImport: failed to parse font '{}': {}", path, e)),
-            };
+            // Quick sanity-check: ttf-parser will fail gracefully, but we want
+            // a clear error message at import time.
+            if ttf_parser::Face::parse(&bytes, 0).is_err() {
+                return Err(format!("FontImport: '{}' is not a valid TTF/OTF font", path));
+            }
 
             let mut font_list = fonts.borrow_mut();
             let index = font_list.len();
-            font_list.push(FontEntry { parser });
+            font_list.push(FontEntry { bytes });
 
             Ok(Value::Number(index as f64))
         })),
@@ -342,7 +342,6 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
     env.define(
         "Text".to_string(),
         Value::NativeFunction(Rc::new(move |args, kwargs: HashMap<String, Value>| {
-            // Parse positional args
             let text_str = match args.get(0) {
                 Some(Value::String(s)) => s.clone(),
                 _ => return Err("Text(str, x, y [, kwargs]): first argument must be a string".to_string()),
@@ -351,55 +350,71 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
             let x = num(args.get(1)) as f32;
             let y = num(args.get(2)) as f32;
 
-            // Parse kwargs
             let font_index = kwarg_num(&kwargs, "font", 0.0) as usize;
-            let font_size = kwarg_num(&kwargs, "size", 48.0) as f32;
+            let font_size  = kwarg_num(&kwargs, "size", 48.0) as f32;
 
-            // Get the font parser
             let font_list = fonts.borrow();
-            let parser = match font_list.get(font_index) {
-                Some(entry) => &entry.parser,
+            let font_bytes = match font_list.get(font_index) {
+                Some(entry) => &entry.bytes,
                 None => return Err(format!(
-                    "Text: font index {} not found. Load a font first with FontImport(path). Loaded fonts: {}",
-                    font_index,
-                    font_list.len()
+                    "Text: font index {} not found. Load a font first with FontImport(path). Loaded: {}",
+                    font_index, font_list.len()
                 )),
             };
 
-            // Build combined path commands for all glyphs
-            let scale = font_size; // glyph outlines are normalized to 1 em
+            // Parse the face with the battle-tested ttf-parser crate.
+            let face = match ttf_parser::Face::parse(font_bytes, 0) {
+                Ok(f) => f,
+                Err(e) => return Err(format!("Text: ttf-parser failed to load face: {:?}", e)),
+            };
+
+            let upem = face.units_per_em() as f32;
+            let scale = font_size / upem;
+
             let mut combined_cmds: Vec<PathCommand> = Vec::new();
             let mut cursor_x: f32 = 0.0;
 
             for ch in text_str.chars() {
-                let outline = parser.get_glyph_outline(ch);
-                let advance = parser.get_glyph_advance(ch);
+                let gid = match face.glyph_index(ch) {
+                    Some(id) => id,
+                    None => {
+                        // Advance by the advance of the space glyph (or ~0.5em) and skip
+                        if let Some(sid) = face.glyph_index(' ') {
+                            let adv = face.glyph_hor_advance(sid).unwrap_or((upem * 0.5) as u16) as f32;
+                            cursor_x += adv * scale;
+                        } else {
+                            cursor_x += font_size * 0.5;
+                        }
+                        continue;
+                    }
+                };
 
-                if outline.is_empty() && !ch.is_whitespace() {
-                    // Character not available in font — advance past it
-                    cursor_x += advance * scale;
-                    continue;
-                }
+                let adv = face.glyph_hor_advance(gid).unwrap_or(0) as f32;
 
-                // Convert the glyph outline to PathCommands, tracking current position
-                convert_glyph_outline(&outline, cursor_x, scale, &mut combined_cmds);
+                // Build an outline for this glyph.
+                let mut builder = GlyphPathBuilder {
+                    cmds: Vec::new(),
+                    cursor_x,
+                    scale,
+                    cur_x: 0.0,
+                    cur_y: 0.0,
+                };
+                // outline_glyph returns None for glyphs with no outline (e.g. space)
+                let _ = face.outline_glyph(gid, &mut builder);
 
-                // Advance cursor for next character
-                cursor_x += advance * scale;
+                combined_cmds.extend(builder.cmds);
+                cursor_x += adv * scale;
             }
 
             if combined_cmds.is_empty() {
-                return Err("Text: no glyphs could be rendered (empty string or missing font glyphs)".to_string());
+                return Err("Text: no glyphs could be rendered (empty string or unsupported chars)".to_string());
             }
 
-            // Parse remaining shape kwargs and spawn
             let mut full_kwargs = kwargs.clone();
-            // Don't pass font/size kwargs to the shape system
             full_kwargs.remove("font");
             full_kwargs.remove("size");
 
             let sk = shapes::parse_shape_kwargs(&full_kwargs);
-
             let mut r = renderer.borrow_mut();
             let id = shapes::spawn_2d_shape_with_kwargs(&mut r, x, y, combined_cmds, &sk);
 
@@ -408,63 +423,80 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
     );
 }
 
-/// Converts a font glyph outline (sequence of GlyphCommand) to PathCommands,
-/// scaled by `scale`, offset in X by `cursor_x`, and tracking current position
-/// for correct QuadTo → CubicTo conversion. Appends to `out_cmds`.
-fn convert_glyph_outline(
-    outline: &[ferrous_font::path::GlyphCommand],
+// ─── ttf-parser OutlineBuilder adapter ───────────────────────────────────────
+//
+// `ttf-parser` calls these methods while walking the glyph outline.
+// Glyph coordinates are in font design units (integer).  We scale them
+// to world-space pixels here (dividing by upem and multiplying by font_size).
+// The Y axis is already +up in TTF, which matches our 2D scene.
+
+struct GlyphPathBuilder {
+    cmds: Vec<PathCommand>,
     cursor_x: f32,
     scale: f32,
-    out_cmds: &mut Vec<PathCommand>,
-) {
-    let mut px: f32 = 0.0;
-    let mut py: f32 = 0.0;
+    cur_x: f32,
+    cur_y: f32,
+}
 
-    for cmd in outline {
-        match *cmd {
-            ferrous_font::path::GlyphCommand::MoveTo(x, y) => {
-                let nx = x * scale + cursor_x;
-                let ny = y * scale;
-                out_cmds.push(PathCommand::MoveTo(Vec2::new(nx, ny)));
-                px = nx;
-                py = ny;
-            }
-            ferrous_font::path::GlyphCommand::LineTo(x, y) => {
-                let nx = x * scale + cursor_x;
-                let ny = y * scale;
-                out_cmds.push(PathCommand::LineTo(Vec2::new(nx, ny)));
-                px = nx;
-                py = ny;
-            }
-            ferrous_font::path::GlyphCommand::QuadTo { ctrl_x, ctrl_y, to_x, to_y } => {
-                // Q0 = current position (px, py) in scaled+offset space
-                let q0x = px;
-                let q0y = py;
+impl ttf_parser::OutlineBuilder for GlyphPathBuilder {
+    fn move_to(&mut self, x: f32, y: f32) {
+        let nx = x * self.scale + self.cursor_x;
+        let ny = y * self.scale;
+        self.cmds.push(PathCommand::MoveTo(Vec2::new(nx, ny)));
+        self.cur_x = nx;
+        self.cur_y = ny;
+    }
 
-                // Q1 (control) and Q2 (end) in scaled+offset space
-                let q1x = ctrl_x * scale + cursor_x;
-                let q1y = ctrl_y * scale;
-                let q2x = to_x * scale + cursor_x;
-                let q2y = to_y * scale;
+    fn line_to(&mut self, x: f32, y: f32) {
+        let nx = x * self.scale + self.cursor_x;
+        let ny = y * self.scale;
+        self.cmds.push(PathCommand::LineTo(Vec2::new(nx, ny)));
+        self.cur_x = nx;
+        self.cur_y = ny;
+    }
 
-                // Convert quadratic (Q0, Q1, Q2) to cubic (C0, C1, C2, C3):
-                //   C0 = Q0
-                //   C3 = Q2
-                //   C1 = Q0 + 2/3 * (Q1 - Q0)
-                //   C2 = Q2 + 2/3 * (Q1 - Q2)
-                let c1x = q0x + (2.0 / 3.0) * (q1x - q0x);
-                let c1y = q0y + (2.0 / 3.0) * (q1y - q0y);
-                let c2x = q2x + (2.0 / 3.0) * (q1x - q2x);
-                let c2y = q2y + (2.0 / 3.0) * (q1y - q2y);
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        // Convert quadratic Bézier (P0, P1, P2) → cubic (P0, C1, C2, P3)
+        //   C1 = P0 + 2/3*(P1-P0)
+        //   C2 = P2 + 2/3*(P1-P2)
+        let q0x = self.cur_x;
+        let q0y = self.cur_y;
+        let q1x = x1 * self.scale + self.cursor_x;
+        let q1y = y1 * self.scale;
+        let q2x = x  * self.scale + self.cursor_x;
+        let q2y = y  * self.scale;
 
-                out_cmds.push(PathCommand::CubicTo(
-                    Vec2::new(c1x, c1y),
-                    Vec2::new(c2x, c2y),
-                    Vec2::new(q2x, q2y),
-                ));
-                px = q2x;
-                py = q2y;
-            }
-        }
+        let c1x = q0x + (2.0 / 3.0) * (q1x - q0x);
+        let c1y = q0y + (2.0 / 3.0) * (q1y - q0y);
+        let c2x = q2x + (2.0 / 3.0) * (q1x - q2x);
+        let c2y = q2y + (2.0 / 3.0) * (q1y - q2y);
+
+        self.cmds.push(PathCommand::CubicTo(
+            Vec2::new(c1x, c1y),
+            Vec2::new(c2x, c2y),
+            Vec2::new(q2x, q2y),
+        ));
+        self.cur_x = q2x;
+        self.cur_y = q2y;
+    }
+
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        let c1x = x1 * self.scale + self.cursor_x;
+        let c1y = y1 * self.scale;
+        let c2x = x2 * self.scale + self.cursor_x;
+        let c2y = y2 * self.scale;
+        let nx  = x  * self.scale + self.cursor_x;
+        let ny  = y  * self.scale;
+        self.cmds.push(PathCommand::CubicTo(
+            Vec2::new(c1x, c1y),
+            Vec2::new(c2x, c2y),
+            Vec2::new(nx, ny),
+        ));
+        self.cur_x = nx;
+        self.cur_y = ny;
+    }
+
+    fn close(&mut self) {
+        self.cmds.push(PathCommand::Close);
     }
 }
