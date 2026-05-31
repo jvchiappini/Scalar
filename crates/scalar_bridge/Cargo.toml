@@ -8,4 +8,5 @@ scalar_lang = { path = "../scalar_lang" }
 ferrous_engine = { workspace = true }
 ferrous_core = { workspace = true }
 ferrous_2d = { workspace = true }
+ferrous_font = { workspace = true }
 anyhow = "1.0"

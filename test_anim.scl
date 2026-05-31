@@ -52,32 +52,43 @@ Axes(-6, 6, -3, 3,
      anim_easing: "ease_out_cubic")
 
 // ───────────────────────────────────────────
-// Animated plots with various easings
+// Animated plots with full timing control
 // ───────────────────────────────────────────
+//
+// Each Plot has staggered anim_delay so they appear one after another:
+//   - sin(x) starts at t=0s,  takes 1.5s to draw (overlap 0.5)
+//   - cos(x) starts at t=1.5s, takes 1.5s to draw (overlap 0.3, tighter)
+//   - x^3/18 starts at t=3.5s, takes 2.5s with bounce easing (fully sequential)
 
-// Sine wave — ease_out_cubic
+// Sine wave — draws first with default overlap
 Plot("sin(x)", -6, 6,
      samples: 300,
      thickness: 3,
      color: [1, 0.3, 0.3, 1],
      animate: true,
-     anim_duration: 3.0,
+     anim_duration: 1.5,
+     anim_delay: 0.0,
+     anim_overlap: 0.5,
      anim_easing: "ease_out_cubic")
 
-// Cosine wave — ease_in_out_quart
+// Cosine wave — starts 1.5s later, tighter segments (less overlap)
 Plot("cos(x)", -6, 6,
      samples: 300,
      thickness: 3,
      color: [0.3, 0.6, 1, 1],
      animate: true,
-     anim_duration: 3.0,
+     anim_duration: 1.5,
+     anim_delay: 1.5,
+     anim_overlap: 0.3,
      anim_easing: "ease_in_out_quart")
 
-// Polynomial — ease_out_bounce
+// Polynomial — starts at t=3.5s, fully sequential segments with bounce
 Plot("x^3/18", -4, 4,
      samples: 200,
      thickness: 3.5,
      color: [0.3, 1, 0.3, 1],
      animate: true,
-     anim_duration: 3.5,
+     anim_duration: 2.5,
+     anim_delay: 3.5,
+     anim_overlap: 0.0,
      anim_easing: "ease_out_bounce")

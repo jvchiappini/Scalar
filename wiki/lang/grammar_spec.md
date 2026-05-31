@@ -14,8 +14,10 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 | **Axes()** | Cartesian axes with grid, ticks, arrows — full kwarg reference | [axes.md](axes.md) |
 | **Plot()** | Mathematical function plotting — full kwarg reference | [plot.md](plot.md) |
 | **Shapes** | Line, Rect, Circle — constructors and style methods | [shapes.md](shapes.md) |
+| **Text & Import** | SVGImport, FontImport, Text — file loading and vector text | [text.md](text.md) |
 | **Project Settings** | Resolution, Background, SetFPS, MotionBlur | [project.md](project.md) |
 | **Animation** | Animate, SetLineProgress, SetLineCap | [animation.md](animation.md) |
+| **Text & Import** | SVGImport, FontImport, Text | [text.md](text.md) |
 
 ---
 
@@ -27,6 +29,11 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 | `Line(x1, y1, x2, y2 [, ...])` | NodeId | [shapes.md](shapes.md) |
 | `Rect(x, y, width, height [, ...])` | NodeId | [shapes.md](shapes.md) |
 | `Circle(x, y, radius [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `Triangle(x, y, size [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `Star(x, y, outer_r, inner_r, points [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `RegularPolygon(x, y, radius, sides [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `Polygon([[x,y], ...] [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `SVG("path" [, ...])` | NodeId | [shapes.md](shapes.md) |
 
 ### Math Primitives
 | Function | Returns | File |
@@ -48,6 +55,13 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 | `SetLineProgress(node_id, progress)` | Show fraction of a line | [animation.md](animation.md) |
 | `SetLineCap(node_id, cap)` | Change line cap style | [animation.md](animation.md) |
 | `Animate(lines: [...], ...)` | Register draw animation | [animation.md](animation.md) |
+
+### Text & File Import
+| Function | Returns | Description | File |
+|----------|---------|-------------|------|
+| `SVGImport(path)` | `List[NodeId]` | Load SVG file, render all `<path>` elements | [text.md](text.md) |
+| `FontImport(path)` | `Number` | Load TrueType/OpenType font for text | [text.md](text.md) |
+| `Text(str, x, y [, kwargs...])` | `NodeId` | Render text as vector paths with loaded font | [text.md](text.md) |
 
 ---
 

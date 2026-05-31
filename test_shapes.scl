@@ -1,0 +1,117 @@
+// Shapes demo — full configurable shapes with fill, stroke, rotation, opacity, z-index
+// Run: cargo run -p scalar_cli -- --script test_shapes.scl --duration 1 --out shapes_demo.png
+
+Resolution(800, 600)
+Background(0.05, 0.05, 0.1)
+
+// ── Basic shapes ──
+
+// Rectangle with fill + stroke + rotation
+Rect(-250, 150, 100, 80,
+    fill: [1, 0.3, 0.3, 1],
+    stroke: [1, 1, 1, 1],
+    stroke_width: 3,
+    rotation: 15,
+    z_index: 1)
+
+// Circle with gradient-like effect (solid fill)
+Circle(0, 150, 50,
+    fill: [0.3, 0.6, 1, 1],
+    stroke: [1, 1, 1, 0.5],
+    stroke_width: 2,
+    z_index: 1)
+
+// Triangle — equilateral, rotated
+Triangle(250, 150, 60,
+    fill: [0.3, 1, 0.3, 1],
+    stroke: WHITE,
+    stroke_width: 2,
+    rotation: 180,
+    z_index: 1)
+
+// ── Star with custom points ──
+
+// 5-pointed star
+Star(-200, -100, 60, 25, 5,
+    fill: YELLOW,
+    stroke: [1, 0.5, 0, 1],
+    stroke_width: 2,
+    z_index: 2)
+
+// 8-pointed star, rotated
+Star(0, -100, 50, 20, 8,
+    fill: MAGENTA,
+    stroke: CYAN,
+    stroke_width: 1.5,
+    rotation: 22.5,
+    z_index: 2)
+
+// 12-pointed star with opacity
+Star(200, -100, 55, 30, 12,
+    fill: [0.5, 0.2, 0.8, 1],
+    stroke: [1, 1, 1, 0.6],
+    opacity: 0.85,
+    z_index: 2)
+
+// ── Regular polygons ──
+
+// Pentagon
+RegularPolygon(-250, -250, 40, 5,
+    fill: [0.2, 0.8, 0.8, 1],
+    stroke: WHITE,
+    stroke_width: 2)
+
+// Hexagon
+RegularPolygon(-100, -250, 45, 6,
+    fill: [0.8, 0.3, 0.8, 1],
+    stroke: WHITE,
+    stroke_width: 2,
+    rotation: 30)
+
+// Octagon
+RegularPolygon(80, -250, 40, 8,
+    fill: [0.8, 0.8, 0.2, 1],
+    stroke: WHITE,
+    stroke_width: 2)
+
+// ── Polygon (arbitrary points) ──
+
+// Custom irregular polygon
+Polygon([[0, -40], [30, -10], [20, 30], [-20, 30], [-30, -10]],
+    fill: [0.2, 0.5, 1, 0.8],
+    stroke: [1, 1, 1, 0.6],
+    stroke_width: 2)
+
+// Diamond
+Polygon([[0, -30], [40, 0], [0, 30], [-40, 0]],
+    fill: CYAN,
+    stroke: WHITE,
+    stroke_width: 2,
+    rotation: 45)
+
+// ── SVG path rendering ──
+
+// Heart
+SVG("M 0 15 C -20 -10, -40 10, 0 40 C 40 10, 20 -10, 0 15 Z",
+    x: -250, y: 200, scale: 1.2,
+    fill: [1, 0.2, 0.2, 1],
+    stroke: [1, 1, 1, 0.8],
+    stroke_width: 2,
+    z_index: 3)
+
+// Star via SVG
+SVG("M 0 -40 L 10 -10 L 40 -10 L 15 10 L 25 40 L 0 20 L -25 40 L -15 10 L -40 -10 L -10 -10 Z",
+    x: 0, y: 200, scale: 1,
+    fill: YELLOW,
+    stroke: ORANGE,
+    stroke_width: 2,
+    z_index: 3)
+
+// Spiral
+SVG("M 0 0 C 15 0, 20 15, 10 20 C -5 25, -20 10, -15 -10 C -10 -25, 15 -30, 25 -10 C 35 10, 30 35, 10 40",
+    x: 250, y: 200, scale: 1,
+    fill: none,
+    stroke: [0.3, 1, 0.3, 0.8],
+    stroke_width: 3,
+    cap: "round",
+    z_index: 3)

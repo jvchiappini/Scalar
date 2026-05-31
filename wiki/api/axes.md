@@ -3,72 +3,83 @@
 **Syntax:** `Axes(x_min, x_max, y_min, y_max [, kwargs...])`
 
 **Description:**
-Dibuja un sistema de coordenadas cartesianas centrado en la pantalla, con escalado automático desde coordenadas matemáticas a píxeles.
+Draws a cartesian coordinate system centered on the screen, with automatic scaling from mathematical coordinates to pixels.
 
-El origen `(0, 0)` se sitúa en el centro de la ventana. El eje Y positivo apunta hacia arriba. El escalado mantiene la relación de aspecto por defecto.
+The origin `(0, 0)` is at the center of the viewport. The Y-axis points upward. Scaling maintains aspect ratio by default.
 
 ---
 
-## Arguments
+## Positional Arguments
 
-| Argument | Type | Obligatorio | Description |
-|----------|------|:-----------:|-------------|
-| `x_min`  | Number | ✓ | Extremo izquierdo del eje X |
-| `x_max`  | Number | ✓ | Extremo derecho del eje X |
-| `y_min`  | Number | ✓ | Extremo inferior del eje Y |
-| `y_max`  | Number | ✓ | Extremo superior del eje Y |
+| Argument | Type | Required | Description |
+|----------|------|:--------:|-------------|
+| `x_min`  | Number | ✓ | Left bound of the X-axis |
+| `x_max`  | Number | ✓ | Right bound of the X-axis |
+| `y_min`  | Number | ✓ | Bottom bound of the Y-axis |
+| `y_max`  | Number | ✓ | Top bound of the Y-axis |
 
-### Keyword Arguments
+---
+
+## Full Keyword Argument Reference
+
+### Grid
 
 | Kwarg | Type | Default | Description |
 |-------|------|---------|-------------|
-| `grid` | Boolean | `false` | Muestra líneas de cuadrícula |
-| `tick_step` | Number | automático | Distancia entre marcas de graduación |
-| `axis_color` | `[r,g,b,a]` | `[0.5,0.5,0.5,1]` | Color de los ejes y ticks |
-| `grid_color` | `[r,g,b,a]` | `[0.2,0.2,0.25,1]` | Color de la cuadrícula |
-| `axis_width` | Number | `2.0` | Grosor de los ejes (píxeles) |
-| `tick_len` | Number | `6.0` | Longitud de las marcas (píxeles) |
-| `arrows` | Boolean | `true` | Muestra flechas en extremos positivos |
-| `aspect` | String | `"fit"` | `"fit"` = mantiene proporción, `"stretch"` = llena la pantalla |
-| `animate` | Boolean | `false` | Habilita animación de dibujo progresivo |
-| `anim_duration` | Number | `1.5` | Duración total de la animación (segundos) |
-| `anim_easing` | String | `"ease_out_cubic"` | Función de easing para la animación (ver [Easing](easing.md)) |
+| `grid` | Boolean | `false` | Show grid lines |
+| `grid_color` | [r,g,b,a] | `[0.2, 0.2, 0.25, 1.0]` | Grid line color |
+| `grid_width` | Number | `1.0` | Grid line thickness in pixels |
+| `grid_alpha` | Number | `1.0` | Grid opacity multiplier (0.0–1.0) |
+
+### Ticks
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `tick_step` | Number | auto | Step between major tick marks (0 = auto-compute) |
+| `tick_len` | Number | `6.0` | Tick mark length in pixels |
+| `tick_width` | Number | `1.5` | Tick mark line thickness |
+| `tick_direction` | String | `"both"` | `"both"`, `"outward"`, `"inward"`, `"none"` |
+| `minor_ticks` | Number | `0` | Number of minor ticks between major ticks |
+
+### Axis Lines
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `axis_color` | [r,g,b,a] | `[0.5, 0.5, 0.5, 1.0]` | Axis line color (both axes) |
+| `x_axis_color` | [r,g,b,a] | `axis_color` | Override color for X-axis only |
+| `y_axis_color` | [r,g,b,a] | `axis_color` | Override color for Y-axis only |
+| `axis_width` | Number | `2.0` | Axis line thickness in pixels |
+| `show_x` | Boolean | `true` | Show X-axis line, ticks, and arrow |
+| `show_y` | Boolean | `true` | Show Y-axis line, ticks, and arrow |
+
+### Arrowheads
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `arrows` | Boolean | `true` | Show arrowheads at positive axis ends |
+| `arrow_size` | Number | `1.0` | Arrowhead size multiplier |
+
+### Layout
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `aspect` | String | `"fit"` | `"fit"` (maintains ratio) or `"stretch"` (fills viewport) |
+| `origin` | String | `"zero"` | Where axes cross: `"zero"` (at 0,0) or `"min"` (at x_min,y_min) |
+| `margin` | Number | `0.0` | Margin around the plot area in pixels |
+| `x_padding` | Number | `0.0` | Fractional x-range padding (e.g. 0.05 = 5%) |
+| `y_padding` | Number | `0.0` | Fractional y-range padding |
+| `z_index` | Number | `0` | Base z-order for all axes elements |
+
+### Animation
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `animate` | Boolean | `false` | Enable draw-in animation |
+| `anim_duration` | Number | `1.5` | Animation duration in seconds |
+| `anim_easing` | String | `"ease_out_cubic"` | Easing function (see [Easing](easing.md)) |
 
 ---
 
-## Escalado automático
+## Full Reference
 
-Las coordenadas son **matemáticas**. El engine calcula automáticamente la escala:
-
-- Con `aspect: "fit"`: `escala = min(ancho / rango_x, alto / rango_y) * 0.9`
-- Con `aspect: "stretch"`: `escala_x = ancho / rango_x`, `escala_y = alto / rango_y`
-
-La transformación a píxeles es: `pixel_x = math_x * escala`, `pixel_y = -math_y * escala`.
-
----
-
-## Example
-
-```scalar
-Resolution(800, 600)
-Background(0.05, 0.05, 0.1)
-
-// Ejes simples
-Axes(-10, 10, -10, 10)
-
-// Ejes con cuadrícula y colores personalizados
-Axes(-5, 5, -5, 5,
-    grid: true,
-    tick_step: 1.0,
-    axis_color: [0.7, 0.7, 0.7, 1.0],
-    grid_color: [0.15, 0.15, 0.2, 1.0],
-    axis_width: 2.5,
-    arrows: true)
-
-// Ejes animados con rebote
-Axes(-6, 6, -4, 4,
-    grid: true,
-    animate: true,
-    anim_duration: 2.0,
-    anim_easing: "ease_out_bounce")
-```
+See [wiki/lang/axes.md](../lang/axes.md) for the complete documentation with examples.

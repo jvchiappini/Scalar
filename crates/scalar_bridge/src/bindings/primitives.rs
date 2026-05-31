@@ -38,9 +38,14 @@
 //! | `anim_easing` | String | `"ease_out_cubic"` | Easing function name |
 //!
 //! ## Plot
-//! `Plot("expression", x_min, x_max [, samples:, thickness:, color:, cap:, animate:, anim_duration:, anim_easing:])`
+//! `Plot("expression", x_min, x_max [, samples:, thickness:, color:, cap:, animate:, anim_duration:, anim_delay:, anim_overlap:, anim_easing:])`
 //!
 //! Evaluates and draws a mathematical function `f(x)` sampled over `[x_min, x_max]`.
+//!
+//! Animation timing is controlled by three kwargs:
+//! - `anim_duration` — total time from first segment start to last segment end (default 2.0)
+//! - `anim_delay` — delay before the plot starts animating (default 0.0)
+//! - `anim_overlap` — overlap between consecutive segments, 0.0 = sequential, 1.0 = parallel (default 0.5)
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -543,6 +548,8 @@ fn register_plot(
             // Animation kwargs
             let animate_plot = kwarg_bool(&kwargs, "animate", false);
             let anim_dur = kwarg_num(&kwargs, "anim_duration", 2.0);
+            let anim_delay = kwarg_num(&kwargs, "anim_delay", 0.0);
+            let anim_overlap = kwarg_num(&kwargs, "anim_overlap", 0.5).clamp(0.0, 1.0);
             let anim_easing_name = kwarg_str(&kwargs, "anim_easing", "ease_out_cubic");
             let anim_easing = easing::Easing::from_str(anim_easing_name);
 
@@ -558,7 +565,7 @@ fn register_plot(
             let mut prev_valid = false;
             let mut prev_px = 0.0f32;
             let mut prev_py = 0.0f32;
-            let mut segment_count = 0usize;
+            let mut segments: Vec<LineData> = Vec::new();
 
             for i in 0..samples {
                 let x = x_min + i as f64 * step;
@@ -579,37 +586,49 @@ fn register_plot(
                 let py = -(y * scale) as f32;
 
                 if prev_valid {
-                    let id = r.spawn_2d_line(prev_px, prev_py, px, py, thickness);
-                    let _ = r.set_stroke(id, color, thickness);
-                    let _ = r.set_line_cap(id, cap_style);
-
-                    if animate_plot {
-                        let nid = id.0 as u64;
-                        // Store original endpoints so animation can interpolate
-                        ld.borrow_mut().insert(nid, LineData {
-                            x1: prev_px, y1: prev_py,
-                            x2: px, y2: py,
-                        });
-                        // Stagger: each segment starts after the previous one finishes
-                        let delay = segment_count as f64 * (anim_dur / samples as f64);
-                        an.borrow_mut().push(AnimatingLine {
-                            node_id: nid,
-                            duration: anim_dur / samples as f64 * 1.5, // slight overlap for smoothness
-                            delay,
-                            start_time: None,
-                            easing: anim_easing,
-                            was_hidden: true,
-                        });
-                        // Hide segment — the animation system will reveal it when progress > 0
-                        let _ = r.set_visible(id, false);
-                    }
-
-                    segment_count += 1;
+                    segments.push(LineData {
+                        x1: prev_px, y1: prev_py,
+                        x2: px, y2: py,
+                    });
                 }
 
                 prev_px = px;
                 prev_py = py;
                 prev_valid = true;
+            }
+
+            // ── Spawn all segments (as lines), then register animation if enabled ──
+            let n_segments = segments.len();
+            for (seg_idx, seg) in segments.iter().enumerate() {
+                let id = r.spawn_2d_line(seg.x1, seg.y1, seg.x2, seg.y2, thickness);
+                let _ = r.set_stroke(id, color, thickness);
+                let _ = r.set_line_cap(id, cap_style);
+
+                if animate_plot && n_segments > 0 {
+                    let nid = id.0 as u64;
+                    // Store original endpoints so animation can interpolate
+                    ld.borrow_mut().insert(nid, seg.clone());
+
+                    // Compute segment timing:
+                    //   total_dur = anim_dur  (time from first segment start to last segment end)
+                    //   overlap ∈ [0, 1] where 0 = sequential, 1 = fully parallel
+                    //   segment_duration = total_dur / (1 + (n-1) * (1-overlap))
+                    //   delay_between    = segment_duration * (1-overlap)
+                    let factor = 1.0 + (n_segments as f64 - 1.0) * (1.0 - anim_overlap);
+                    let seg_duration = if factor > 0.0 { anim_dur / factor } else { anim_dur };
+                    let delay_between = seg_duration * (1.0 - anim_overlap);
+
+                    an.borrow_mut().push(AnimatingLine {
+                        node_id: nid,
+                        duration: seg_duration,
+                        delay: anim_delay + seg_idx as f64 * delay_between,
+                        start_time: None,
+                        easing: anim_easing,
+                        was_hidden: true,
+                    });
+                    // Hide segment — the animation system will reveal it when progress > 0
+                    let _ = r.set_visible(id, false);
+                }
             }
 
             Ok(Value::Number(0.0))

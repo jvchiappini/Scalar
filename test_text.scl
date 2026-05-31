@@ -1,0 +1,70 @@
+// Text rendering demo with font import and SVGImport
+// Run: cargo run -p scalar_cli -- --input test_text.scl --duration 3 --output text_demo.mp4
+// (Requires Roboto-Regular.ttf at the path below)
+
+Resolution(1280, 720)
+Background(0.05, 0.05, 0.1)
+
+// ── Load a TrueType font ───────────────────────────────────
+// Returns a font index (0-based) used by Text().
+// Path is relative to run directory. Adjust if needed.
+let font = FontImport("../96a0b3c0-be13-4354-8674-72220ab22596/assets/fonts/Roboto-Regular.ttf")
+
+// ── Basic text with fill ──
+Text("Hello, Scalar!", 0, 250,
+    font: font,
+    size: 64,
+    fill: [0.3, 0.6, 1, 1])
+
+// ── Text with fill + stroke ──
+Text("Styled Text", 0, 170,
+    font: font,
+    size: 48,
+    fill: [0.1, 0.1, 0.2, 1],
+    stroke: [1, 1, 1, 1],
+    stroke_width: 1.5)
+
+// ── Text with fill + stroke + rotation ──
+Text("Rotated!", -250, 50,
+    font: font,
+    size: 36,
+    fill: [1, 0.8, 0.2, 1],
+    stroke: [1, 0.4, 0, 1],
+    stroke_width: 1,
+    rotation: -15)
+
+// ── Text with opacity ──
+Text("Faded Text", 250, 50,
+    font: font,
+    size: 36,
+    fill: [1, 1, 1, 1],
+    opacity: 0.5)
+
+// ── Text with stroke only (NONE fill) ──
+Text("Stroke Only", 0, -40,
+    font: font,
+    size: 48,
+    fill: NONE,
+    stroke: [1, 0.3, 0.3, 1],
+    stroke_width: 2)
+
+// ── Text with descenders (g, j, p, q, y) and ñ ──
+Text("jugando con glyphs ñoño", 0, -140,
+    font: font,
+    size: 40,
+    fill: [0.5, 1, 0.5, 1],
+    z_index: 10)
+
+// ── Smaller text with custom color ──
+Text("The quick brown fox jumps over the lazy dog", 0, -230,
+    font: font,
+    size: 24,
+    fill: [0.7, 0.7, 0.7, 1],
+    z_index: 5)
+
+// ── Large text as a title ──
+Text("SCALAR", 0, 300,
+    font: font,
+    size: 96,
+    fill: [1, 1, 1, 0.15],
+    z_index: -1)

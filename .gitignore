@@ -34,3 +34,5 @@ __pycache__/
 !.env.example
 MEMORY.md
 USER.md
+/MEMORY.md
+/USER.md

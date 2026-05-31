@@ -14,6 +14,7 @@ clap = { version = "4.4", features = ["derive"] }
 ferrous_engine = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_engine" }
 ferrous_core = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_core" }
 ferrous_2d = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_2d" }
+ferrous_font = { path = "../96a0b3c0-be13-4354-8674-72220ab22596/crates/ferrous_font" }
 
 glam = "0.24"
 rc = "0.1" # Wait, rc is std, but maybe some other crate? Usually just use std::rc

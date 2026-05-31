@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use scalar_lang::Environment;
 use ferrous_engine::{Renderer, RendererMode};
+use crate::bindings::imports::FontEntry;
 
 /// Metadata stored for each line, used by progress-based animations.
 #[derive(Clone, Debug)]
@@ -39,6 +40,8 @@ pub struct Bridge {
     pub fps: Rc<RefCell<u32>>,
     /// Motion blur sub-samples (0 = disabled). Set via `MotionBlur(samples)` in script.
     pub motion_blur_samples: Rc<RefCell<u32>>,
+    /// Loaded fonts for text rendering (indexed by FontImport return value).
+    pub fonts: Rc<RefCell<Vec<FontEntry>>>,
 }
 
 impl Bridge {
@@ -61,6 +64,7 @@ impl Bridge {
             animations: Rc::new(RefCell::new(Vec::new())),
             fps: Rc::new(RefCell::new(fps)),
             motion_blur_samples: Rc::new(RefCell::new(0)),
+            fonts: Rc::new(RefCell::new(Vec::new())),
         })
     }
 
@@ -69,6 +73,7 @@ impl Bridge {
         bindings::shapes::register(env, self.renderer.clone(), self.line_data.clone());
         bindings::animation::register(env, self.renderer.clone(), self.line_data.clone(), self.animations.clone());
         bindings::primitives::register(env, self.renderer.clone(), self.line_data.clone(), self.animations.clone());
+        bindings::imports::register(env, self.renderer.clone(), self.fonts.clone());
     }
 
     /// Called before each frame render. Advances all active line-draw animations.

@@ -48,6 +48,7 @@ impl Environment {
         variables.insert("YELLOW".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)]));
         variables.insert("CYAN".to_string(), Value::List(vec![Value::Number(0.0), Value::Number(1.0), Value::Number(1.0), Value::Number(1.0)]));
         variables.insert("MAGENTA".to_string(), Value::List(vec![Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)]));
+        variables.insert("NONE".to_string(), Value::List(vec![])); // no-fill sentinel
         variables.insert("true".to_string(), Value::Boolean(true));
         variables.insert("false".to_string(), Value::Boolean(false));
 

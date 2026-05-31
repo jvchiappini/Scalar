@@ -2700,6 +2700,7 @@ dependencies = [
  "ferrous_2d",
  "ferrous_core",
  "ferrous_engine",
+ "ferrous_font",
  "scalar_lang",
 ]
 
