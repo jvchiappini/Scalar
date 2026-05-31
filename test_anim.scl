@@ -1,4 +1,4 @@
-// Animated Axes + Plot demo — 4K 240fps con motion blur
+// Animated Axes + Plot demo — 4K 240fps with motion blur and full configuration
 // Run: cargo run -p scalar_cli -- --script test_anim.scl --duration 5 --out anim_4k_240fps.mp4
 
 Resolution(3840, 2160)
@@ -10,15 +10,52 @@ SetFPS(240)
 // Motion blur with 4 sub-samples per frame
 MotionBlur(4)
 
-// Animated axes: all elements (axis lines, ticks, grid, arrows) draw in parallel
+// ───────────────────────────────────────────
+// Richly configured axes with grid, styled ticks, minor grid, and per-axis colors
+// ───────────────────────────────────────────
 Axes(-6, 6, -3, 3,
+     // Grid
      grid: true,
+     grid_color: [0.15, 0.15, 0.2, 1.0],
+     grid_width: 0.8,
+     grid_alpha: 0.6,
+
+     // Ticks
      tick_step: 1.0,
+     tick_len: 8.0,
+     tick_width: 2.0,
+     tick_direction: "outward",
+     minor_ticks: 4,
+
+     // Axis styling
+     axis_width: 2.5,
+     x_axis_color: [1.0, 0.4, 0.4, 1.0],
+     y_axis_color: [0.4, 0.7, 1.0, 1.0],
+     show_x: true,
+     show_y: true,
+
+     // Layout
+     aspect: "fit",
+     origin: "zero",
+     margin: 30,
+     x_padding: 0.05,
+     y_padding: 0.05,
+     z_index: 0,
+
+     // Arrows
+     arrows: true,
+     arrow_size: 1.5,
+
+     // Animation
      animate: true,
      anim_duration: 1.5,
      anim_easing: "ease_out_cubic")
 
-// Animated plot: segments stagger, drawing the curve from left to right
+// ───────────────────────────────────────────
+// Animated plots with various easings
+// ───────────────────────────────────────────
+
+// Sine wave — ease_out_cubic
 Plot("sin(x)", -6, 6,
      samples: 300,
      thickness: 3,
@@ -27,7 +64,7 @@ Plot("sin(x)", -6, 6,
      anim_duration: 3.0,
      anim_easing: "ease_out_cubic")
 
-// Second plot with different easing
+// Cosine wave — ease_in_out_quart
 Plot("cos(x)", -6, 6,
      samples: 300,
      thickness: 3,
@@ -36,7 +73,7 @@ Plot("cos(x)", -6, 6,
      anim_duration: 3.0,
      anim_easing: "ease_in_out_quart")
 
-// Third plot: polynomial with bounce easing
+// Polynomial — ease_out_bounce
 Plot("x^3/18", -4, 4,
      samples: 200,
      thickness: 3.5,

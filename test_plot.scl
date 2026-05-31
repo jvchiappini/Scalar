@@ -1,20 +1,31 @@
-// Demo de Axes + Plot en Scalar
-// Sistema de coordenadas matemáticas con escalado automático
+// Axes + Plot demo in Scalar
+// Mathematical coordinate system with auto-scaling
 
 Resolution(800, 600)
 Background(0.05, 0.05, 0.1)
 
-// ── Ejes cartesianos con grid ──
+// ── Cartesian axes with grid, styled ticks, and minor grid ──
 Axes(-6, 6, -4, 4,
     grid: true,
+    grid_width: 0.8,
+    grid_alpha: 0.6,
     tick_step: 1.0,
+    tick_len: 8.0,
+    tick_width: 2.0,
+    tick_direction: "outward",
+    minor_ticks: 4,
     axis_color: [0.6, 0.6, 0.6, 1.0],
     grid_color: [0.15, 0.15, 0.2, 1.0],
     axis_width: 2.0,
     arrows: true,
-    aspect: "fit")
+    arrow_size: 1.2,
+    aspect: "fit",
+    origin: "zero",
+    x_padding: 0.05,
+    y_padding: 0.05,
+    margin: 10)
 
-// ── Funciones trigonométricas ──
+// ── Trigonometric functions ──
 Plot("sin(x)", -6, 6,
     samples: 300, thickness: 3,
     color: [1.0, 0.3, 0.3, 1.0],
@@ -25,12 +36,12 @@ Plot("cos(x)", -6, 6,
     color: [0.3, 0.6, 1.0, 1.0],
     cap: "round")
 
-// ── Polinomio ──
+// ── Polynomial ──
 Plot("x^3/12 - x", -6, 6,
     samples: 200, thickness: 2.5,
     color: [0.3, 1.0, 0.3, 1.0])
 
-// ── Parábola con punta cuadrada ──
+// ── Parabola with square caps ──
 Plot("x^2/4", -6, 6,
     samples: 150, thickness: 4,
     color: [1.0, 1.0, 0.3, 1.0],

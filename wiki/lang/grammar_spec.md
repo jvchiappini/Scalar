@@ -1,104 +1,106 @@
-# Scalar Grammar Specification
+# Scalar Language Specification
 
-This document defines the formal grammar and syntax for the Scalar Language.
-
-## Syntax Overview
+This document is the entry point for the Scalar language grammar and built-in function reference.
 
 Scalar is a declarative-execution language designed for visual mathematics and animation.
 
-### Core Types
-- **Number**: 64-bit floating point.
-- **List**: Ordered collection of values: `[val1, val2, ...]`.
-- **NodeId**: Reference to an entity in the rendering engine, returned by shape constructors.
-- **String**: Text enclosed in double quotes: `"hello"`.
-- **Color**: RGBA vector (4-component List or individual components).
+---
 
-### Statements
-- **Variable Declaration**: `let x = 10`
-- **For Loop**: `for i in 0..10 { ... }`
-- **Method Call**: `object.method(args)`
-- **Import**: `import "filename.scl"` (merges functions and variables with the current scope)
+## Quick Index
 
-### Named Arguments (Kwargs)
-Functions and methods accept keyword arguments after positional ones:
-```
-func(pos1, pos2, key1: value1, key2: value2)
-```
+| Topic | Description | File |
+|-------|-------------|------|
+| **Core Syntax** | Types, statements, kwargs, OO syntax, color constants | [syntax.md](syntax.md) |
+| **Axes()** | Cartesian axes with grid, ticks, arrows — full kwarg reference | [axes.md](axes.md) |
+| **Plot()** | Mathematical function plotting — full kwarg reference | [plot.md](plot.md) |
+| **Shapes** | Line, Rect, Circle — constructors and style methods | [shapes.md](shapes.md) |
+| **Project Settings** | Resolution, Background, SetFPS, MotionBlur | [project.md](project.md) |
+| **Animation** | Animate, SetLineProgress, SetLineCap | [animation.md](animation.md) |
 
 ---
 
-## Built-in Functions
+## Function Index (Quick Reference)
 
 ### Shapes
-| Function | Description |
-|----------|-------------|
-| `Line(x1, y1, x2, y2 [, thickness [, r, g, b, a]] [, cap: "round"])` | 2D line segment |
-| `Rect(x, y, width, height [, r, g, b, a])` | 2D filled rectangle |
-| `Circle(x, y, radius [, r, g, b, a])` | 2D filled circle |
-
-### Project
-| Function | Description |
-|----------|-------------|
-| `Resolution(width, height)` | Set render target dimensions |
-| `Background(r, g, b [, a])` | Set background clear color |
-| `SetFPS(fps)` | Override output frame rate |
-| `MotionBlur(samples)` | Enable/disable motion blur (0 = off, >0 = sub-samples) |
+| Function | Returns | File |
+|----------|---------|------|
+| `Line(x1, y1, x2, y2 [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `Rect(x, y, width, height [, ...])` | NodeId | [shapes.md](shapes.md) |
+| `Circle(x, y, radius [, ...])` | NodeId | [shapes.md](shapes.md) |
 
 ### Math Primitives
-| Function | Description |
-|----------|-------------|
-| `Axes(x_min, x_max, y_min, y_max [, grid:, tick_step:, ...])` | Cartesian axes with grid, ticks, arrows |
-| `Plot("expr", x_min, x_max [, samples:, thickness:, color:, cap:])` | Plot mathematical function `f(x)` |
+| Function | Returns | File |
+|----------|---------|------|
+| `Axes(x_min, x_max, y_min, y_max [, kwargs...])` | Number | [axes.md](axes.md) |
+| `Plot("expr", x_min, x_max [, kwargs...])` | Number | [plot.md](plot.md) |
+
+### Project
+| Function | Description | File |
+|----------|-------------|------|
+| `Resolution(width, height)` | Set render dimensions | [project.md](project.md) |
+| `Background(r, g, b [, a])` | Set clear color | [project.md](project.md) |
+| `SetFPS(fps)` | Override frame rate | [project.md](project.md) |
+| `MotionBlur(samples)` | Enable/disable motion blur | [project.md](project.md) |
 
 ### Animation
-| Function | Description |
-|----------|-------------|
-| `SetLineProgress(node_id, progress)` | Shows fraction `[0,1]` of a line |
-| `SetLineCap(node_id, cap)` | Changes line cap style (`"round"`, `"square"`, `"flat"`) |
-| `Animate(lines: [id, ...], per_line: 1.0, staggered: true, easing: "ease_out_cubic")` | Registers a line-draw animation with easing |
-
-`Animate()` kwargs:
-
-| Kwarg | Type | Default | Description |
-|-------|------|---------|-------------|
-| `lines` | `[NodeId]` | (required) | Lines to animate |
-| `per_line` | Number | `1.0` | Duration per line (seconds) |
-| `duration` | Number | — | Total duration (alternative to `per_line`) |
-| `staggered` | Boolean | `true` | If `true`, lines animate sequentially |
-| `easing` | String | `"ease_out_cubic"` | Easing function name (see [Easing](../api/easing.md)) |
-
-### Style Methods
-| Method | Description |
-|--------|-------------|
-| `obj.set_fill(r, g, b, a)` | Sets fill color |
-| `obj.set_stroke(r, g, b, a, thickness)` | Sets stroke color and thickness |
-| `obj.set_z_index(z)` | Sets 2D painter's order |
-| `obj.morph_to(target, duration:, easing:)` | Morphs geometry to another shape |
-
-### Standard Colors
-`WHITE`, `BLACK`, `RED`, `GREEN`, `BLUE`, `YELLOW`, `CYAN`, `MAGENTA`
+| Function | Description | File |
+|----------|-------------|------|
+| `SetLineProgress(node_id, progress)` | Show fraction of a line | [animation.md](animation.md) |
+| `SetLineCap(node_id, cap)` | Change line cap style | [animation.md](animation.md) |
+| `Animate(lines: [...], ...)` | Register draw animation | [animation.md](animation.md) |
 
 ---
 
-## Object-Oriented Syntax
-Scalar supports method injection. If `obj` is a `NodeId`, calling `obj.method(...)` is equivalent to a native call where `obj` is the first argument.
+## Complete Script Example
 
 ```scalar
-let c = Circle(50)
-c.set_fill(RED)
+// 4K 240fps animated demo with motion blur
+Resolution(3840, 2160)
+Background(0.05, 0.05, 0.1)
+SetFPS(240)
+MotionBlur(4)
+
+// Animated axes with styled grid and ticks
+Axes(-6, 6, -3, 3,
+     grid: true,
+     grid_width: 0.8,
+     grid_alpha: 0.5,
+     tick_step: 1.0,
+     tick_direction: "outward",
+     minor_ticks: 4,
+     margin: 20,
+     arrow_size: 1.5,
+     animate: true,
+     anim_duration: 1.5,
+     anim_easing: "ease_out_cubic")
+
+// Animated plots with different easings
+Plot("sin(x)", -6, 6,
+     samples: 300, thickness: 3,
+     color: [1, 0.3, 0.3, 1],
+     animate: true,
+     anim_duration: 3.0,
+     anim_easing: "ease_out_cubic")
+
+Plot("cos(x)", -6, 6,
+     samples: 300, thickness: 3,
+     color: [0.3, 0.6, 1, 1],
+     animate: true,
+     anim_duration: 3.0,
+     anim_easing: "ease_in_out_quart")
+
+Plot("x^3/18", -4, 4,
+     samples: 200, thickness: 3.5,
+     color: [0.3, 1, 0.3, 1],
+     animate: true,
+     anim_duration: 3.5,
+     anim_easing: "ease_out_bounce")
 ```
 
 ---
 
-## Examples
+## See Also
 
-```scalar
-// Linea con puntas cuadradas animada
-let l = Line(-200, 0, 200, 0, 10, cap: "square")
-Animate(lines: [l], per_line: 2.0)
-
-// Multiples lineas secuenciales
-let a = Line(-300, 0, 300, 0, 20, 1, 0, 0)
-let b = Line(0, -200, 0, 200, 20, 0, 1, 0)
-Animate(lines: [a, b], per_line: 1.5, staggered: true)
-```
+- [Easing Function Reference](../api/easing.md) — all supported easing curves
+- [Bindings Memory Map](../bindings/memory_map.md) — FFI layer between VM and renderer
+- [Engine Architecture](../engine/architecture.md) — render pipeline and ECS lifecycle

@@ -32,3 +32,5 @@ __pycache__/
 .env
 .env.*
 !.env.example
+MEMORY.md
+USER.md
