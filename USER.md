@@ -7,7 +7,7 @@
 - Communication: Direct, points out problems concisely
 
 ## Working Patterns
-- Tests features by running the demo scripts and observing the output video
+- Tests features by downloading the code and running on **Windows PC** — never run the CLI binary in the development workspace (it has no GPU/display server)
 - Reports visual issues (rendering artifacts, animation glitches) with specific descriptions
 - Prefers animated effects to have smooth easing curves
 - Likes visual polish (bounce, elastic easings)

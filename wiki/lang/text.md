@@ -1,12 +1,14 @@
 # Text &amp; Import — SVG, Font, and Text Rendering
 
-Three new functions for file import and vector text rendering:
+Functions for file import and vector text rendering:
 
 | Function | Returns | Description |
 |----------|---------|-------------|
 | `SVGImport(path)` | `List[NodeId]` | Load an SVG file and render all `<path>` elements |
 | `FontImport(path)` | `Number` (index) | Load a TrueType/OpenType font for text rendering |
 | `Text(str, x, y [, ...kwargs])` | `NodeId` | Render a string as vector paths using a loaded font |
+
+For animated text (character-by-character reveal), see [`WriteText`](animation.md#writetext) in the animation docs.
 
 ---
 

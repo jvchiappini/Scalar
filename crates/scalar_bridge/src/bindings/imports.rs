@@ -36,6 +36,13 @@ pub struct FontEntry {
     pub bytes: Vec<u8>,
 }
 
+/// Per-character path data returned by `glyph_paths_for_text`.
+pub struct GlyphPathData {
+    pub commands: Vec<PathCommand>,
+    pub width: f32,
+    pub character: char,
+}
+
 /// Registers SVGImport, FontImport, and Text into the Scalar environment.
 pub fn register(
     env: &mut Environment,
@@ -347,8 +354,16 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
                 _ => return Err("Text(str, x, y [, kwargs]): first argument must be a string".to_string()),
             };
 
-            let x = num(args.get(1)) as f32;
-            let y = num(args.get(2)) as f32;
+            let x = if args.len() > 1 {
+                num(args.get(1)) as f32
+            } else {
+                kwarg_num(&kwargs, "x", 0.0) as f32
+            };
+            let y = if args.len() > 2 {
+                num(args.get(2)) as f32
+            } else {
+                kwarg_num(&kwargs, "y", 0.0) as f32
+            };
 
             let font_index = kwarg_num(&kwargs, "font", 0.0) as usize;
             let font_size  = kwarg_num(&kwargs, "size", 48.0) as f32;
@@ -413,6 +428,8 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
             let mut full_kwargs = kwargs.clone();
             full_kwargs.remove("font");
             full_kwargs.remove("size");
+            full_kwargs.remove("x");
+            full_kwargs.remove("y");
 
             let sk = shapes::parse_shape_kwargs(&full_kwargs);
             let mut r = renderer.borrow_mut();
@@ -421,6 +438,77 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
             Ok(Value::NodeId(id))
         })),
     );
+}
+
+/// Builds a list of per-character path data from a text string using a loaded font.
+///
+/// Each entry contains the `PathCommand` sequence for one glyph, its advance width
+/// in pixels, and the character itself.  This is used by `WriteText()` to animate
+/// characters individually.
+///
+/// # Arguments
+/// * `font_bytes` — Raw bytes of a TTF/OTF font file.
+/// * `text` — The string to render.
+/// * `font_size` — Font size in pixels.
+///
+/// # Returns
+/// A `Vec<GlyphPathData>` with one entry per renderable character.  Characters that
+/// have no outline (e.g. spaces) are skipped.
+pub fn glyph_paths_for_text(
+    font_bytes: &[u8],
+    text: &str,
+    font_size: f32,
+) -> Result<Vec<GlyphPathData>, String> {
+    let face = ttf_parser::Face::parse(font_bytes, 0)
+        .map_err(|e| format!("ttf-parser failed to load face: {:?}", e))?;
+    let upem = face.units_per_em() as f32;
+    let scale = font_size / upem;
+
+    let mut result: Vec<GlyphPathData> = Vec::new();
+    let mut cursor_x: f32 = 0.0;
+
+    for ch in text.chars() {
+        let gid = match face.glyph_index(ch) {
+            Some(id) => id,
+            None => {
+                // Advance by the space width and skip
+                if let Some(sid) = face.glyph_index(' ') {
+                    let adv =
+                        face.glyph_hor_advance(sid).unwrap_or((upem * 0.5) as u16) as f32;
+                    cursor_x += adv * scale;
+                } else {
+                    cursor_x += font_size * 0.5;
+                }
+                continue;
+            }
+        };
+
+        let adv = face.glyph_hor_advance(gid).unwrap_or(0) as f32;
+        let mut builder = GlyphPathBuilder {
+            cmds: Vec::new(),
+            cursor_x,
+            scale,
+            cur_x: 0.0,
+            cur_y: 0.0,
+        };
+        let has_outline = face.outline_glyph(gid, &mut builder).is_some();
+
+        if has_outline && !builder.cmds.is_empty() {
+            result.push(GlyphPathData {
+                commands: builder.cmds,
+                width: adv * scale,
+                character: ch,
+            });
+        }
+
+        cursor_x += adv * scale;
+    }
+
+    if result.is_empty() {
+        return Err("no renderable glyphs found in text".to_string());
+    }
+
+    Ok(result)
 }
 
 // ─── ttf-parser OutlineBuilder adapter ───────────────────────────────────────

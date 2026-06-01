@@ -67,13 +67,13 @@ fn main() -> anyhow::Result<()> {
             let std_tokens: Vec<_> = scalar_lang::lexer::Token::lexer(&std_content).spanned()
                 .filter_map(|(t, s)| t.ok().map(|token| (token, s))).collect();
             if let Ok(std_ast) = scalar_lang::parse(std_tokens) {
-                let _ = scalar_lang::evaluate(std_ast, &mut env);
+                let _ = scalar_lang::evaluate(&std_content, std_ast, &mut env);
             }
         }
     }
 
     // ── Run user script ───────────────────────────────────────────
-    scalar_lang::evaluate(ast, &mut env)
+    scalar_lang::evaluate(&content, ast, &mut env)
         .map_err(|e| anyhow::anyhow!("Eval error: {}", e))?;
 
     // ── Read settings set by script ───────────────────────────────

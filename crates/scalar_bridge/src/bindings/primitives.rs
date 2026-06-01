@@ -54,7 +54,7 @@ use scalar_lang::{Environment, Value};
 use ferrous_engine::Renderer;
 
 use crate::math_eval;
-use crate::{LineData, AnimatingLine, easing};
+use crate::{LineData, AnimationEntry, AnimationKind, easing};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ fn spawn_line_animated(
     width: f32, color: [f32; 4],
     animate: bool,
     line_data: &Rc<RefCell<HashMap<u64, LineData>>>,
-    animations: &Rc<RefCell<Vec<AnimatingLine>>>,
+    animations: &Rc<RefCell<Vec<AnimationEntry>>>,
     anim_dur: f64,
     anim_easing: easing::Easing,
     z_index: i32,
@@ -122,12 +122,13 @@ fn spawn_line_animated(
     if animate {
         let nid = id.0 as u64;
         line_data.borrow_mut().insert(nid, LineData { x1, y1, x2, y2 });
-        animations.borrow_mut().push(AnimatingLine {
+        animations.borrow_mut().push(AnimationEntry {
             node_id: nid,
             duration: anim_dur,
             delay: 0.0,
             start_time: None,
             easing: anim_easing,
+            kind: AnimationKind::LineDraw,
             was_hidden: true,
         });
         // Hide line immediately — the animation system will reveal it
@@ -141,7 +142,7 @@ pub fn register(
     env: &mut Environment,
     renderer: Rc<RefCell<Renderer>>,
     line_data: Rc<RefCell<HashMap<u64, LineData>>>,
-    animations: Rc<RefCell<Vec<AnimatingLine>>>,
+    animations: Rc<RefCell<Vec<AnimationEntry>>>,
 ) {
     register_axes(env, renderer.clone(), line_data.clone(), animations.clone());
     register_plot(env, renderer.clone(), line_data.clone(), animations.clone());
@@ -154,7 +155,7 @@ fn register_axes(
     env: &mut Environment,
     renderer: Rc<RefCell<Renderer>>,
     line_data: Rc<RefCell<HashMap<u64, LineData>>>,
-    animations: Rc<RefCell<Vec<AnimatingLine>>>,
+    animations: Rc<RefCell<Vec<AnimationEntry>>>,
 ) {
     let ren = renderer.clone();
     let ld = line_data.clone();
@@ -466,7 +467,7 @@ fn draw_arrow_animated(
     width: f32,
     animate: bool,
     line_data: &Rc<RefCell<HashMap<u64, LineData>>>,
-    animations: &Rc<RefCell<Vec<AnimatingLine>>>,
+    animations: &Rc<RefCell<Vec<AnimationEntry>>>,
     anim_dur: f64,
     anim_easing: easing::Easing,
     z_index: i32,
@@ -511,7 +512,7 @@ fn register_plot(
     env: &mut Environment,
     renderer: Rc<RefCell<Renderer>>,
     line_data: Rc<RefCell<HashMap<u64, LineData>>>,
-    animations: Rc<RefCell<Vec<AnimatingLine>>>,
+    animations: Rc<RefCell<Vec<AnimationEntry>>>,
 ) {
     let ren = renderer.clone();
     let ld = line_data.clone();
@@ -618,12 +619,13 @@ fn register_plot(
                     let seg_duration = if factor > 0.0 { anim_dur / factor } else { anim_dur };
                     let delay_between = seg_duration * (1.0 - anim_overlap);
 
-                    an.borrow_mut().push(AnimatingLine {
+                    an.borrow_mut().push(AnimationEntry {
                         node_id: nid,
                         duration: seg_duration,
                         delay: anim_delay + seg_idx as f64 * delay_between,
                         start_time: None,
                         easing: anim_easing,
+                        kind: AnimationKind::LineDraw,
                         was_hidden: true,
                     });
                     // Hide segment — the animation system will reveal it when progress > 0

@@ -1,72 +1,29 @@
 # Scalar Project Memory
 
 ## Last Session
-- **Date:** 2026-06-01
-- **Summary:** Added SVG file import (SVGImport), font import (FontImport), and vector text rendering (Text) system. Text renders glyph outlines as 2D paths — no rasterization, fully resizable, rotatable, stylable. Refactored shape kwarg system to support explicit "no fill" via NONE sentinel (empty list). Added NONE to environment constants.
+- **Date:** 2026-06-03
+- **Summary:** Fixed WriteText double-spacing bug (cursor_x already baked into path coords). Added `DrawThenFill` AnimationKind variant (two-phase scale-up + fill-fade). Added standalone `DrawThenFill()` function for any node. Added `RevealText()` — character-by-character draw-then-fill text reveal. Updated demo script and wiki docs.
 - **Changed files:**
-  - `crates/scalar_bridge/Cargo.toml` — added `ferrous_font` workspace dependency
-  - `Cargo.toml` — added `ferrous_font` to workspace dependencies
-  - `crates/scalar_bridge/src/bindings/imports.rs` — **NEW FILE**: SVGImport, FontImport, Text native functions + SVG XML scanner + glyph-to-path converter
-  - `crates/scalar_bridge/src/bindings/mod.rs` — added `pub mod imports`
-  - `crates/scalar_bridge/src/lib.rs` — added `fonts: Rc<RefCell<Vec<FontEntry>>>` to Bridge, register imports in `register_functions()`
-  - `crates/scalar_bridge/src/bindings/shapes.rs` — made `parse_svg_path`, `ShapeKwargs`, `parse_shape_kwargs`, `spawn_2d_shape_with_kwargs`, `num`, `kwarg_num` `pub(super)`; refactored fill parsing to support `[]` sentinel for explicit "no fill"; added `color_from_list` helper
-  - `crates/scalar_lang/src/runtime.rs` — added `NONE` constant (empty list sentinel for no fill)
-  - `test_text.scl` — **NEW FILE**: demo of FontImport + Text with all kwarg combinations
-  - `wiki/lang/text.md` — **NEW FILE**: complete documentation for SVGImport, FontImport, Text
-  - `wiki/lang/grammar_spec.md` — added Text & Import section to index and function tables
-  - `wiki/README.md` — added text.md to language reference table
-- **Changed files:**
-  - `crates/scalar_bridge/src/bindings/shapes.rs` — **Complete rewrite**:
-    - All doc comments translated from Spanish to English
-    - **New shapes**: `Triangle`, `Star`, `RegularPolygon`, `Polygon`, `SVG`
-    - **Unified kwargs for all shapes**: `fill`, `fill_color`, `stroke`, `stroke_width`, `opacity`, `z_index`, `rotation`, `visible`, `cap`
-    - Backward compatible: `Rect` and `Circle` still accept positional color args
-    - `Line` enhanced with `stroke`, `stroke_width`, `opacity`, `z_index`, `visible` kwargs
-    - Internal `ShapeKwargs` struct + `parse_shape_kwargs()` for unified parsing
-    - `spawn_2d_shape_with_kwargs()` helper creates path nodes with full config
-    - Path builders: `rect_path`, `circle_path`, `triangle_path`, `regular_polygon_path`, `star_path`, `polygon_path`
-    - **SVG path parser** (`parse_svg_path`): supports M/m, L/l, H/h, V/v, C/c, S/s, Q/q, T/t, Z/z (both absolute and relative)
-    - Quadratic beziers (Q/q, T/t) are converted to cubic beziers for rendering
-    - SVG shapes support `x`, `y`, `scale` kwargs for positioning
-    - Rotation via `Quat::from_rotation_z()` applied through Transform
-    - Fill defaults to white for all shapes
-  - `crates/scalar_bridge/src/bindings/primitives.rs` — **Complete rewrite of Axes()**:
-    - All doc comments translated from Spanish to English
-    - New kwargs: `grid_width`, `grid_alpha`, `grid_color`, `tick_width`, `tick_direction`, `minor_ticks`, `show_x`, `show_y`, `x_axis_color`, `y_axis_color`, `origin`, `margin`, `x_padding`, `y_padding`, `arrow_size`, `z_index`
-    - Minor grid rendering (when `minor_ticks > 0`) with half-opacity shorter lines
-    - `tick_direction`: "both" (default), "outward", "inward", "none" — controls tick orientation relative to axis
-    - `origin`: "zero" (cross at 0,0) or "min" (cross at x_min,y_min for chart-style)
-    - `spawn_line_animated` and `draw_arrow_animated` now accept `z_index` and `arrow_size` parameters
-    - Grid lines use `grid_width` and `grid_alpha` (was hardcoded 1.0 width)
-    - Ticks use `tick_width` (was hardcoded 1.5)
-    - Margin and padding affect the effective plotting area
-    - `set_z_index` called on every spawned element for proper z-ordering
-    - Detailed Rustdoc with full kwarg table
-    - **Plot animation upgraded**: `anim_delay` (delay before start) and `anim_overlap` (0.0 sequential ↔ 1.0 parallel) for full timeline control
-    - **Segment generation refactored**: first-collect-then-spawn pattern (collects all `LineData`, then spawns lines + registers animations in a separate loop)
-  - `wiki/lang/grammar_spec.md` — **Trimmed to concise index** with links to new modular sub-pages
-  - `wiki/lang/syntax.md` — **New file:** core types, statements, kwargs, OO syntax, standard colors
-  - `wiki/lang/axes.md` — **New file:** full Axes() kwarg reference with examples
-  - `wiki/lang/plot.md` — **New file:** full Plot() kwarg reference with expression syntax and animation timing model
-  - `wiki/lang/shapes.md` — **New file:** Line, Rect, Circle, style methods
-  - `wiki/lang/project.md` — **New file:** Resolution, Background, SetFPS, MotionBlur
-  - `wiki/lang/animation.md` — **New file:** Animate, SetLineProgress, SetLineCap
-  - `wiki/api/axes.md` — Updated with full English reference, redirects to lang/axes.md
-  - `wiki/api/plot.md` — Updated with new animation kwargs (`anim_delay`, `anim_overlap`)
-  - `wiki/lang/grammar.md` — **Deleted** (was old stale partial file, superseded by grammar_spec.md + sub-pages)
-  - `wiki/README.md` — Updated index to reflect modular structure
-  - `test_plot.scl` — Updated to demonstrate new Axes() kwargs (grid_width, grid_alpha, tick_direction, minor_ticks, arrow_size, margin, padding, origin)
-  - `test_anim.scl` — Updated to demonstrate new Axes() kwargs + Plot() animation timing (staggered anim_delay, anim_overlap per plot)
+  - `crates/scalar_bridge/src/lib.rs` — Added `AnimationKind::DrawThenFill { from_scale, fill_rgba }` variant; added initial capture + two-phase dispatch in `before_frame` (phase 1: scale 0→1 at 0–60% progress, phase 2: fill fade at 60–100%)
+  - `crates/scalar_bridge/src/bindings/animation.rs` — Fixed WriteText double-spacing (removed cumulative advance offset from char_x); added `register_draw_then_fill()` (standalone DrawThenFill function); added `register_reveal_text()` (character-by-character draw-then-fill reveal); **BUG FIX**: `WriteText`/`RevealText` now read `x`/`y` from kwargs as fallback (not only positional args)
+  - `crates/scalar_bridge/src/bindings/imports.rs` — **BUG FIX**: `Text()` now reads `x`/`y` from kwargs as fallback
+  - `test_text_anim.scl` — Added RevealText demo section; updated duration hint from 12→14s
+  - `wiki/lang/animation.md` — Added RevealText and DrawThenFill sections with full kwarg tables and examples; added "How Animations Work" lifecycle section
+  - `wiki/bindings/animation_api.md` — Added DrawThenFill and RevealText API reference sections; updated implementation notes for DrawThenFill
+  - `wiki/lang/grammar_spec.md` — Added DrawThenFill and RevealText to animation function table
 
 ## Open TODOs
+- [ ] Download code and test on Windows PC with `test_text_anim.scl` (GPU required)
+- [ ] Verify WriteText spacing is correct (no double spacing)
+- [ ] Verify RevealText draw-then-fill visual effect
 - [ ] Profile CPU hot spots: `sync_ecs_to_shape_batcher`, `before_frame`, `animator_system.run()`
 - [ ] Run `test_anim.scl` and compare perf before/after
 - [ ] Consider `--release` profile for benchmarking (debug mode is 10-50× slower for CPU work)
-- [ ] Run `test_text.scl` to verify text rendering output
 - [ ] Add coverage for composite glyphs (font parser handles composites, but test with accented chars)
 - [ ] Consider adding kerning support for Text() (currently uses only advance width)
 - [ ] Consider adding SVG `<rect>`, `<circle>`, `<ellipse>` element support in SVGImport
 - [ ] Consider adding multiline text support (newline handling) to Text()
+- [ ] Consider adding `TransformCharacters(source_ids, target_ids)` to morph one text into another
 
 ## Key Decisions
 
@@ -141,6 +98,9 @@ Text(x, y) uses (x, y) as the baseline start position (bottom-left of the first 
 - `animation.md` — Animate/SetLineProgress/SetLineCap
 This follows the project's strict modularity tenet.
 
+## Implementation Constraints
+- **Do NOT run `cargo run -p scalar_cli` on this server.** The CLI requires a GPU / display server. The user downloads the code and runs on their Windows PC. Only `cargo check` / `cargo build` are safe here.
+
 ## Known Issues / Technical Debt
 - ferrous_ui_core, ferrous_core, ferrous_engine, etc. have pre-existing warnings (unused imports, etc.) — not our concern
 - svgparser v0.8.1 is flagged for future Rust incompatibility
@@ -152,7 +112,7 @@ This follows the project's strict modularity tenet.
 ## Localization Debt
 - [x] `crates/scalar_bridge/src/bindings/primitives.rs` — doc comments were in Spanish, now translated to English
 - [x] `crates/scalar_bridge/src/bindings/shapes.rs` — top doc comment in Spanish, now translated to English
-- [ ] `crates/scalar_bridge/src/bindings/animation.rs` — inline comment on line 24 in Spanish (spotted 2026-05-31)
+- [x] `crates/scalar_bridge/src/bindings/animation.rs` — inline comment on line 24 was in Spanish, translated during full rewrite on 2026-06-01
 
 ## Relevant Files
 - `crates/scalar_bridge/src/easing.rs` — 30 easing functions

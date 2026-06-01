@@ -16,7 +16,7 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 | **Shapes** | Line, Rect, Circle — constructors and style methods | [shapes.md](shapes.md) |
 | **Text & Import** | SVGImport, FontImport, Text — file loading and vector text | [text.md](text.md) |
 | **Project Settings** | Resolution, Background, SetFPS, MotionBlur | [project.md](project.md) |
-| **Animation** | Animate, SetLineProgress, SetLineCap | [animation.md](animation.md) |
+| **Animation** | Animate, FadeIn, FadeOut, Grow, Shrink, MoveTo, SetLineProgress, SetLineCap, WriteText | [animation.md](animation.md) |
 | **Text & Import** | SVGImport, FontImport, Text | [text.md](text.md) |
 
 ---
@@ -50,11 +50,19 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 | `MotionBlur(samples)` | Enable/disable motion blur | [project.md](project.md) |
 
 ### Animation
-| Function | Description | File |
-|----------|-------------|------|
-| `SetLineProgress(node_id, progress)` | Show fraction of a line | [animation.md](animation.md) |
-| `SetLineCap(node_id, cap)` | Change line cap style | [animation.md](animation.md) |
-| `Animate(lines: [...], ...)` | Register draw animation | [animation.md](animation.md) |
+| Function | Returns | Description | File |
+|----------|---------|-------------|------|
+| `SetLineProgress(node_id, progress)` | Number | Show fraction of a line | [animation.md](animation.md) |
+| `SetLineCap(node_id, cap)` | Number | Change line cap style | [animation.md](animation.md) |
+| `Animate(lines: [...], ...)` | Number | Register line-draw animation | [animation.md](animation.md) |
+| `FadeIn(node_id, ...)` | Number | Fade node from opacity 0→1 | [animation.md](animation.md) |
+| `FadeOut(node_id, ...)` | Number | Fade node from opacity 1→0 | [animation.md](animation.md) |
+| `Grow(node_id, ...)` | Number | Scale node from 0→1   | [animation.md](animation.md) |
+| `Shrink(node_id, ...)` | Number | Scale node from 1→0   | [animation.md](animation.md) |
+| `MoveTo(node_id, x, y, ...)` | Number | Slide node to position (x,y) | [animation.md](animation.md) |
+| `DrawThenFill(node_id, ...)` | Number | Two-phase scale-up + fill-fade reveal | [animation.md](animation.md) |
+| `WriteText(str, x, y, ...)` | `[NodeId]` | Character-by-character text fade-in reveal | [animation.md](animation.md) |
+| `RevealText(str, x, y, ...)` | `[NodeId]` | Character-by-character draw-then-fill text reveal | [animation.md](animation.md) |
 
 ### Text & File Import
 | Function | Returns | Description | File |

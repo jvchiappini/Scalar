@@ -1,0 +1,118 @@
+// Text animation demo — Manim-inspired text effects
+// Run: cargo run -p scalar_cli -- -i test_text_anim.scl -d 14 -o text_anim_demo.mp4
+//
+// Requires: Roboto-Regular.ttf at assets/fonts/ (adjust path below if needed)
+
+Resolution(1280, 720)
+Background(0.05, 0.05, 0.12)
+
+SetFPS(60)
+
+// Load font
+let font = FontImport("../96a0b3c0-be13-4354-8674-72220ab22596/assets/fonts/Roboto-Regular.ttf")
+
+// ───────────────────────────────────────────
+// 1. WriteText — character-by-character reveal
+// ───────────────────────────────────────────
+let title_chars = WriteText("Text Animation System",
+    x: 0, y: 300,
+    font: font, size: 48,
+    duration: 2.0,
+    easing: "ease_out_cubic",
+    fill: [0.3, 0.6, 1.0, 1.0])
+
+// ───────────────────────────────────────────
+// 2. FadeIn — a subtitle fades in after a delay
+// ───────────────────────────────────────────
+let subtitle = Text("Powered by Scalar Engine",
+    x: 0, y: 250,
+    font: font, size: 24,
+    fill: [0.7, 0.7, 0.9, 1.0])
+
+// Note: FadeIn is registered as an animation, opacity animates from 0 → 1
+FadeIn(subtitle, duration: 1.0, delay: 2.5, easing: "ease_out_sine")
+
+// ───────────────────────────────────────────
+// 3. FadeOut — the title fades out
+// ───────────────────────────────────────────
+// Apply FadeOut to each character with a stagger
+FadeOut(title_chars, duration: 0.8, delay: 3.5, easing: "ease_in_cubic")
+
+// ───────────────────────────────────────────
+// 4. Manim-like Write with bounce easing
+// ───────────────────────────────────────────
+let body = WriteText("Characters appear one by one",
+    x: 0, y: 100,
+    font: font, size: 36,
+    duration: 2.5,
+    easing: "ease_out_bounce",
+    fill: [0.2, 1.0, 0.4, 1.0],
+    delay: 4.5)
+
+// ───────────────────────────────────────────
+// 5. Grow — scale up a shape
+// ───────────────────────────────────────────
+let box = Rect(-150, -50, 100, 100,
+    fill: [0.8, 0.2, 0.3, 1.0],
+    stroke: [1.0, 1.0, 1.0, 1.0],
+    stroke_width: 2.0,
+    z_index: 5)
+
+// Grow from scale 0 → 1
+Grow(box, duration: 1.0, delay: 7.5, easing: "ease_out_back")
+
+// ───────────────────────────────────────────
+// 6. WriteText + FadeIn label for the box
+// ───────────────────────────────────────────
+let label = WriteText("Grow Animation",
+    x: -100, y: -120,
+    font: font, size: 20,
+    duration: 0.8,
+    easing: "ease_out_cubic",
+    fill: [0.8, 0.8, 0.8, 1.0],
+    delay: 8.0)
+
+// ───────────────────────────────────────────
+// 7. Shrink the box away
+// ───────────────────────────────────────────
+Shrink(box, duration: 0.8, delay: 9.0, easing: "ease_in_cubic")
+
+// ───────────────────────────────────────────
+// 8. MoveTo — slide a shape across the screen
+// ───────────────────────────────────────────
+let ball = Circle(150, -50, 30,
+    fill: [1.0, 0.8, 0.0, 1.0],
+    stroke: [1.0, 1.0, 1.0, 0.5],
+    stroke_width: 2.0,
+    z_index: 10)
+
+// Animate circle position from current (150, -50) → (-150, -50)
+MoveTo(ball, x: -150, y: -50,
+    duration: 1.5,
+    delay: 9.5,
+    easing: "ease_in_out_cubic")
+
+// ───────────────────────────────────────────
+// 9. RevealText — draw-then-fill character reveal
+// ───────────────────────────────────────────
+let reveal_chars = RevealText("Draw n Fill",
+    x: 150, y: -50,
+    font: font, size: 36,
+    duration: 2.0,
+    easing: "ease_out_cubic",
+    fill: [0.3, 0.6, 1.0, 1.0],
+    stroke: [0.2, 0.2, 0.2, 1.0],
+    stroke_width: 1.5,
+    delay: 10.5)
+
+// ───────────────────────────────────────────
+// 10. FadeIn + FadeOut combined for a compound effect
+// ───────────────────────────────────────────
+let credits = Text("FadeIn / FadeOut / Grow / Shrink / MoveTo / WriteText / RevealText",
+    x: 0, y: -250,
+    font: font, size: 18,
+    fill: [0.5, 0.5, 0.6, 1.0])
+
+FadeIn(credits, duration: 1.0, delay: 10.5, easing: "ease_out_sine")
+// Keep visible for a moment, then fade out
+FadeOut(credits, duration: 1.0, delay: 11.0, easing: "ease_in_sine")
