@@ -2,6 +2,8 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::ast::Stmt;
+
 /// Represents a value in the Scalar runtime.
 #[derive(Clone)]
 pub enum Value {
@@ -12,6 +14,12 @@ pub enum Value {
     NativeFunction(Rc<dyn Fn(Vec<Value>, HashMap<String, Value>) -> Result<Value, String>>),
     String(String),
     Object(HashMap<String, Value>),
+    /// A user-defined function (`fn name(params) { body }`).
+    Fn {
+        params: Vec<String>,
+        body: Vec<Stmt>,
+        source: String,
+    },
 }
 
 impl fmt::Debug for Value {
@@ -24,11 +32,13 @@ impl fmt::Debug for Value {
             Value::NativeFunction(_) => write!(f, "NativeFunction"),
             Value::String(s) => write!(f, "String({})", s),
             Value::Object(o) => write!(f, "Object({:?})", o.keys()),
+            Value::Fn { params, .. } => write!(f, "Fn({})", params.join(", ")),
         }
     }
 }
 
 /// Execution environment holding variables and function state.
+#[derive(Clone)]
 pub struct Environment {
     variables: HashMap<String, Value>,
     parent: Option<Rc<Environment>>,

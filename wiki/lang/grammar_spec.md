@@ -69,7 +69,7 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 |----------|---------|-------------|------|
 | `SVGImport(path)` | `List[NodeId]` | Load SVG file, render all `<path>` elements | [text.md](text.md) |
 | `FontImport(path)` | `Number` | Load TrueType/OpenType font for text | [text.md](text.md) |
-| `Text(str, x, y [, kwargs...])` | `NodeId` | Render text as vector paths with loaded font | [text.md](text.md) |
+| `Text(str, x, y [, kwargs...])` | `[NodeId]` | Render text as vector paths with loaded font (one `NodeId` per glyph) | [text.md](text.md) |
 | `Tex(expr, x, y [, kwargs...])` | `[NodeId]` | Render LaTeX math expression as vector paths (returns one `NodeId` per glyph/piece) | [text.md](text.md) |
 
 ---

@@ -19,6 +19,7 @@ Functions for animating lines, shapes, and text.
 | `WriteText` | Text | Character-by-character fade-in reveal |
 | `RevealText` | Text | Character-by-character draw-then-fill reveal |
 | `DrawThenFill` | Any node | Scale up + fill fade-in two-phase animation |
+| `Morph` | Any node with `PathData` | Path vertex interpolation between two shapes |
 
 ---
 
@@ -100,6 +101,7 @@ Animate(lines: [id, ...], per_line: 0.5, staggered: true)
 | `fill` | [r,g,b,a] | — | Target fill color (required for `DrawThenFill`) |
 | `x` | Number | — | Target x position (required for `MoveTo`) |
 | `y` | Number | — | Target y position (required for `MoveTo`) |
+| `into` | NodeId | — | Source node for morphing (required for `"Morph"`) |
 
 ### Effect Reference
 
@@ -112,6 +114,7 @@ Animate(lines: [id, ...], per_line: 0.5, staggered: true)
 | `"DrawThenFill"` | `fill: [r,g,b,a]` | Phase 1: scale up outline; Phase 2: fill fades in |
 | `"MoveTo"` | `x: N, y: N` | Slide position from current → (x, y) |
 | `"LineDraw"` | — | Line endpoint draw (for `Line()` objects) |
+| `"Morph"` | `into: source_node` | Path vertex morph from source → target shape |
 
 ### Examples
 
@@ -367,6 +370,58 @@ Two-phase reveal animation for any node (shapes, text, etc.), inspired by Manim'
 ```scalar
 let c = Circle(0, 0, 50, fill: [0.3, 0.6, 1, 1], stroke: [0.2, 0.2, 0.2, 1], stroke_width: 2)
 DrawThenFill(c, duration: 1.5, fill: [0.3, 0.6, 1, 1], easing: "ease_out_back")
+```
+
+---
+
+## Morph
+
+```scalar
+Morph(target, source, duration: 1.0, delay: 0.0, easing: "ease_out_cubic")
+```
+
+Animates the path of `target` so it morphs from `source`'s shape into `target`'s own shape.
+Both nodes must have `PathData` (created by any shape function: `Circle`, `Rect`, `Polygon`,
+`Tex()`, etc.).
+
+### How It Works
+
+1. All vertices and control points are extracted from both paths in traversal order
+2. The shorter point sequence is padded with its last point to match lengths
+3. Each frame, points are linearly interpolated and reconstructed as a polyline
+   (`MoveTo` + `LineTo` + `Close`)
+4. The reconstructed path replaces the target's `PathData` via `set_path_data()`
+
+> ⚠️ Note: Curved segments become polylines during the morph. This is consistent with
+> Manim-style morphing — visually smooth results for most shape-to-shape transitions.
+
+### Using via Animate
+
+```scalar
+// Equivalent to Morph(target, source, ...)
+Animate(target, "Morph", into: source, duration: 2.0)
+```
+
+### Examples
+
+```scalar
+// Basic shape morph
+let circle = Circle(200, 0, 50, fill: [0.3, 0.6, 1, 1])
+let rect = Rect(-200, 0, 120, 80, fill: [0.3, 0.6, 1, 1])
+Morph(rect, circle, duration: 2.0)      // rect morphs from circle
+
+// Staggered Tex morph
+let eq1 = Tex("f(x) = x^2", x: 0, y: 0)
+let eq2 = Tex("g(x) = \\sin x", x: 0, y: 0)
+Animate(eq2, "Morph", into: eq1, duration: 1.0)
+
+// Per-glyph text morph (Text() returns [NodeId], one per glyph)
+let hello = Text("Hello", x: -100, y: 0, font: f, size: 48)
+let world = Text("World", x: -100, y: 0, font: f, size: 48,
+    fill: [0.6, 0.4, 1.0, 1.0])
+SetVisibility(world, false)
+Animate(world, "Morph", into: hello, duration: 1.2, easing: "ease_in_out_cubic")
+// Each glyph morphs independently: H→W, e→o, l→r, l→l, o→d
 ```
 
 ---

@@ -13,9 +13,12 @@
 - Likes visual polish (bounce, elastic easings)
 
 ## Current Priorities
-- Getting Axes and Plot animations to work perfectly (no pre-animation artifacts)
-- Building a solid easing system that can be extended in the future
-- Polish the animation system for demos and presentations
+- Building a pro-level animation system that surpasses Manim
+- **Implement user-defined functions (`fn`)** — the foundation for abstraction and reuse
+- **Implement `Wait()` + `Play()`** — professional choreography sequencing
+- Adding missing objects: Arrow, Dot, NumberPlane, Brace
+- Fixing `Grow` animation (currently a no-op)
+- Polish morph system: per-glyph text morph working, test on Windows
 
 ## Project Values
 - Code must compile cleanly (no warnings from our crates)

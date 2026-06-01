@@ -1,234 +1,160 @@
-// Text animation demo — comprehensive test of all WriteText / RevealText / Tex variants
-// Run: cargo run -p scalar_cli -- -i test_text_anim.scl -d 28 -o text_anim_demo.mp4
+// Morph() animation demo — shapes and LaTeX morphing
+// Run: cargo run -p scalar_cli -- -i test_text_anim.scl -d 9 -o morph_demo.mp4
 //
-// Requires: Roboto-Regular.ttf at assets/fonts/ (adjust path below if needed)
-// Tex() uses a pure-Rust math renderer — no external tools needed!
+// Morph() works with ANY node that has PathData:
+//   - Shapes: Circle, Rect, Polygon, Star, Triangle, etc.
+//   - LaTeX via Tex() (RaTeX pure-Rust math renderer)
+//
+// After morph completes, the original target shape is restored exactly.
+// The source is auto-hidden when morph starts.
+// Both Morph() and Animate("Morph") accept single NodeId or [NodeId].
 
 Resolution(1280, 720)
 Background(0.05, 0.05, 0.12)
-
 SetFPS(60)
 
-// Load font
+// Font for labels
 let font = FontImport("../96a0b3c0-be13-4354-8674-72220ab22596/assets/fonts/Roboto-Regular.ttf")
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 1 — WriteText: basic fade-in per character (duration-based timing)
-// ═══════════════════════════════════════════════════════════════════════════════
-let title_chars = WriteText("1) WriteText (basic)",
-    x: 0, y: 320,
-    font: font, size: 32,
-    duration: 1.5,
-    easing: "ease_out_cubic",
-    fill: [0.3, 0.6, 1.0, 1.0])
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1 — Shape morph: Circle → Rect (standalone Morph())
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 2 — WriteText: per_char override (each char shows for 0.12s)
-// Short text so the total duration stays reasonable.
-// ═══════════════════════════════════════════════════════════════════════════════
-let per_char_chars = WriteText("2) per_char",
-    x: -400, y: 260,
-    font: font, size: 28,
-    per_char: 0.12,
-    delay: 2.0,
-    easing: "ease_out_cubic",
-    fill: [0.2, 1.0, 0.4, 1.0])
+let s1_title = Text("1) Circle → Rect",
+    x: -500, y: 280,
+    font: font, size: 22,
+    fill: [0.5, 0.5, 0.8, 1.0])
+FadeIn(s1_title, duration: 0.3, delay: 0.0, easing: "ease_out_sine")
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 3 — WriteText with stroke (fade-in + visible outline)
-// ═══════════════════════════════════════════════════════════════════════════════
-let stroke_chars = WriteText("3) WriteText stroke",
-    x: 0, y: 260,
-    font: font, size: 28,
-    duration: 1.5,
-    delay: 2.0,
-    easing: "ease_out_cubic",
-    fill: [1.0, 0.8, 0.0, 1.0],
-    stroke: [1.0, 1.0, 1.0, 0.6],
-    stroke_width: 1.5)
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 4 — WriteText with bounce easing
-// ═══════════════════════════════════════════════════════════════════════════════
-let bounce_chars = WriteText("4) WriteText bounce",
-    x: 400, y: 260,
-    font: font, size: 28,
-    duration: 1.8,
-    delay: 2.0,
-    easing: "ease_out_bounce",
-    fill: [1.0, 0.4, 0.4, 1.0])
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 5 — RevealText: basic (segment_subdivisions: 1 — original behavior)
-// ═══════════════════════════════════════════════════════════════════════════════
-let reveal_basic = RevealText("subdiv: 1",
-    x: -350, y: 80,
-    font: font, size: 26,
-    duration: 2.5,
-    delay: 5.0,
-    easing: "ease_out_cubic",
+// Source: blue circle at left
+let circle = Circle(-250, 100, 60,
     fill: [0.3, 0.6, 1.0, 1.0],
-    stroke: [0.2, 0.2, 0.2, 1.0],
-    stroke_width: 1.5,
-    segment_subdivisions: 1)
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 6 — RevealText: smooth (segment_subdivisions: 6)
-// ═══════════════════════════════════════════════════════════════════════════════
-let reveal_smooth = RevealText("subdiv: 6",
-    x: 0, y: 80,
-    font: font, size: 26,
-    duration: 2.5,
-    delay: 5.0,
-    easing: "ease_out_cubic",
-    fill: [0.2, 1.0, 0.4, 1.0],
-    stroke: [0.2, 0.2, 0.2, 1.0],
-    stroke_width: 1.5,
-    segment_subdivisions: 6)
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 7 — RevealText: ultra smooth (segment_subdivisions: 12)
-// ═══════════════════════════════════════════════════════════════════════════════
-let reveal_ultra = RevealText("subdiv: 12",
-    x: 350, y: 80,
-    font: font, size: 26,
-    duration: 2.5,
-    delay: 5.0,
-    easing: "ease_out_cubic",
-    fill: [1.0, 0.8, 0.0, 1.0],
-    stroke: [0.2, 0.2, 0.2, 1.0],
-    stroke_width: 1.5,
-    segment_subdivisions: 12)
-
-// Label the comparison row
-let reveal_label = Text("RevealText comparison (subdiv: 1  |  6  |  12)",
-    x: 0, y: 130,
-    font: font, size: 14,
-    fill: [0.5, 0.5, 0.7, 1.0])
-FadeIn(reveal_label, duration: 0.5, delay: 5.0, easing: "ease_out_sine")
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 8 — RevealText: per_char + delay + custom stroke
-// ═══════════════════════════════════════════════════════════════════════════════
-let reveal_delayed = RevealText("8) RevealText per_char + delay",
-    x: 0, y: 0,
-    font: font, size: 26,
-    per_char: 0.25,
-    delay: 8.5,
-    easing: "ease_out_sine",
-    fill: [1.0, 0.4, 1.0, 1.0],
     stroke: [0.5, 0.5, 0.5, 1.0],
-    stroke_width: 1.5,
-    segment_subdivisions: 6)
+    stroke_width: 2.0)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 9 — RevealText: thin characters that benefit most from subdivision
-// (letters like "l", "i", "t" have few path segments → subdivision helps)
-// ═══════════════════════════════════════════════════════════════════════════════
-let thin_chars = RevealText("9) thin chars: l i l i l i  |  subdiv: 8",
-    x: 0, y: -80,
-    font: font, size: 30,
-    duration: 3.0,
-    delay: 11.5,
-    easing: "ease_out_cubic",
-    fill: [0.3, 0.6, 1.0, 1.0],
-    stroke: [0.2, 0.2, 0.2, 1.0],
-    stroke_width: 2.0,
-    segment_subdivisions: 8)
+// Target: green rect at same position (hidden initially)
+let rect = Rect(-250, 100, 120, 100,
+    fill: [0.2, 1.0, 0.4, 1.0],
+    stroke: [0.5, 0.5, 0.5, 1.0],
+    stroke_width: 2.0)
+SetVisibility(rect, false)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 10 — WriteText vs RevealText side-by-side comparison
-// ═══════════════════════════════════════════════════════════════════════════════
-let comp_fade = WriteText("WriteText",
-    x: -200, y: -190,
+// Morph rect from circle — circle auto-hides when morph starts,
+// rect path is restored to exact original on completion.
+Morph(rect, circle, duration: 1.0, delay: 0.8, easing: "ease_in_out_cubic")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2 — Shape morph: Star → Triangle
+// ─────────────────────────────────────────────────────────────────────────────
+
+let s2_title = Text("2) Star → Triangle",
+    x: 100, y: 280,
     font: font, size: 22,
-    duration: 1.0,
-    delay: 15.5,
-    easing: "ease_out_cubic",
-    fill: [0.3, 0.6, 1.0, 1.0])
+    fill: [0.5, 0.5, 0.8, 1.0])
+FadeIn(s2_title, duration: 0.3, delay: 2.5, easing: "ease_out_sine")
 
-let comp_reveal = RevealText("RevealText",
-    x: 100, y: -190,
-    font: font, size: 22,
-    duration: 1.5,
-    delay: 15.5,
-    easing: "ease_out_cubic",
-    fill: [1.0, 0.8, 0.0, 1.0],
-    stroke: [0.2, 0.2, 0.2, 1.0],
-    stroke_width: 1.0,
-    segment_subdivisions: 6)
-
-// Label the comparison
-let comp_label = Text("WriteText vs RevealText (same timing)",
-    x: 0, y: -145,
-    font: font, size: 13,
-    fill: [0.5, 0.5, 0.7, 1.0])
-FadeIn(comp_label, duration: 0.5, delay: 15.5, easing: "ease_out_sine")
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 11 — Credits (FadeIn / FadeOut)
-// ═══════════════════════════════════════════════════════════════════════════════
-let credits = Text("WriteText / RevealText / per_char / delay / segment_subdivisions / stroke / easing",
-    x: 0, y: -270,
-    font: font, size: 16,
-    fill: [0.5, 0.5, 0.6, 1.0])
-
-FadeIn(credits, duration: 1.0, delay: 17.5, easing: "ease_out_sine")
-FadeOut(credits, duration: 1.0, delay: 18.5, easing: "ease_in_sine")
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 12 — LaTeX: simple equation (per-glyph Animate with stagger)
-// ═══════════════════════════════════════════════════════════════════════════════
-// Animate() handles per-element stagger automatically — no for-loop needed!
-let eq1 = Tex("E = mc^2",
-    x: -350, y: 240,
-    fill: [0.3, 0.6, 1.0, 1.0])
-Animate(eq1, "FadeIn", duration: 0.25, stagger: 0.08, delay: 19.5,
-    easing: "ease_out_cubic")
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 13 — LaTeX: integral with stroke (per-glyph Animate with stagger)
-// ═══════════════════════════════════════════════════════════════════════════════
-let eq2 = Tex("\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}",
-    x: 0, y: 240,
+// Source: yellow star
+let star = Star(100, 100, 60, 30, 5,
     fill: [1.0, 0.8, 0.2, 1.0],
     stroke: [0.5, 0.5, 0.5, 1.0],
-    stroke_width: 0.5)
-Animate(eq2, "FadeIn", duration: 0.2, stagger: 0.06, delay: 20.0,
-    easing: "ease_out_sine")
+    stroke_width: 2.0)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 14 — LaTeX: summation (per-glyph Animate with tighter stagger)
-// ═══════════════════════════════════════════════════════════════════════════════
-let eq3 = Tex("\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}",
-    x: 350, y: 240,
-    fill: [0.2, 1.0, 0.4, 1.0])
-Animate(eq3, "FadeIn", duration: 0.15, stagger: 0.04, delay: 20.5,
-    easing: "ease_out_cubic")
+// Target: purple triangle (hidden initially)
+let triangle = Triangle(100, 100, 80,
+    fill: [0.6, 0.4, 1.0, 1.0],
+    stroke: [0.5, 0.5, 0.5, 1.0],
+    stroke_width: 2.0)
+SetVisibility(triangle, false)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 15 — LaTeX: lim with per-glyph DrawThenFill
-// ═══════════════════════════════════════════════════════════════════════════════
-let eq4 = Tex("\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1",
-    x: 0, y: 160,
-    fill: [1.0, 0.4, 0.4, 1.0])
-Animate(eq4, "DrawThenFill", duration: 0.4, stagger: 0.1, delay: 22.0,
-    fill: [1.0, 0.4, 0.4, 1.0])
+Morph(triangle, star, duration: 1.0, delay: 3.3, easing: "ease_in_out_cubic")
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 16 — LaTeX: matrix (per-glyph FadeIn with fine stagger)
-// ═══════════════════════════════════════════════════════════════════════════════
-let eq5 = Tex("\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}^{-1} = \\frac{1}{ad-bc} \\begin{bmatrix} d & -b \\\\ -c & a \\end{bmatrix}",
-    x: 0, y: 80,
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3 — LaTeX morph via Animate dispatcher
+// E = mc² morphs into √π/2 with source auto-hidden.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let s3_title = Text("3) LaTeX morph via Animate(\"Morph\")",
+    x: -500, y: 50,
+    font: font, size: 22,
+    fill: [0.5, 0.5, 0.8, 1.0])
+FadeIn(s3_title, duration: 0.3, delay: 5.5, easing: "ease_out_sine")
+
+// Source LaTeX (gold)
+let src_tex = Tex("E = mc^2",
+    x: -250, y: -60,
+    fill: [1.0, 0.8, 0.2, 1.0])
+
+// Target LaTeX (purple, hidden)
+let tgt_tex = Tex("\\frac{\\sqrt{\\pi}}{2}",
+    x: -250, y: -60,
     fill: [0.6, 0.4, 1.0, 1.0])
-Animate(eq5, "FadeIn", duration: 0.25, stagger: 0.05, delay: 24.0,
-    easing: "ease_out_cubic")
+SetVisibility(tgt_tex, false)
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// Animate morph via the universal dispatcher
+Animate(tgt_tex, "Morph", into: src_tex, duration: 1.2, delay: 6.3,
+    easing: "ease_in_out_cubic")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4 — Shape morph via Animate dispatcher: Polygon → Star
+// ─────────────────────────────────────────────────────────────────────────────
+
+let s4_title = Text("4) Animate Polygon → Star via dispatcher",
+    x: 100, y: 50,
+    font: font, size: 22,
+    fill: [0.5, 0.5, 0.8, 1.0])
+FadeIn(s4_title, duration: 0.3, delay: 5.5, easing: "ease_out_sine")
+
+// Source: cyan hexagon
+let hexagon = RegularPolygon(100, -60, 50, 6,
+    fill: [0.3, 0.8, 1.0, 1.0],
+    stroke: [0.5, 0.5, 0.5, 1.0],
+    stroke_width: 2.0)
+
+// Target: pink star (hidden)
+let pink_star = Star(100, -60, 55, 25, 6,
+    fill: [1.0, 0.4, 0.7, 1.0],
+    stroke: [0.5, 0.5, 0.5, 1.0],
+    stroke_width: 2.0)
+SetVisibility(pink_star, false)
+
+Animate(pink_star, "Morph", into: hexagon, duration: 1.0, delay: 6.3,
+    easing: "ease_in_out_cubic")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5 — Per-glyph text morph: "Hello" → "World" via Animate dispatcher
+// ─────────────────────────────────────────────────────────────────────────────
+
+let s5_title = Text("5) Text morph: Hello → World (per-glyph!)",
+    x: -500, y: -150,
+    font: font, size: 22,
+    fill: [0.5, 0.5, 0.8, 1.0])
+FadeIn(s5_title, duration: 0.3, delay: 8.0, easing: "ease_out_sine")
+
+// Source text: "Hello" rendered per-glyph (gold)
+// Text() now returns [NodeId] — each character is an independent shape.
+let src_hello = Text("Hello",
+    x: -200, y: -220,
+    font: font, size: 64,
+    fill: [1.0, 0.8, 0.2, 1.0])
+
+// Target text: "World" rendered per-glyph (purple, hidden)
+let tgt_world = Text("World",
+    x: -200, y: -220,
+    font: font, size: 64,
+    fill: [0.6, 0.4, 1.0, 1.0])
+SetVisibility(tgt_world, false)
+
+// Morph each glyph pair via Animate dispatcher.
+// Since Text() returns [NodeId], each character in "World" pairs with
+// the corresponding character in "Hello": H→W, e→o, l→r, l→l, o→d
+Animate(tgt_world, "Morph", into: src_hello, duration: 1.2, delay: 8.8,
+    easing: "ease_in_out_cubic")
+
+// ─────────────────────────────────────────────────────────────────────────────
 // End note
-// ═══════════════════════════════════════════════════════════════════════════════
-let end_note = Text("Expected duration: ~28s  |  Tex() uses RaTeX (pure-Rust math renderer)",
-    x: 0, y: -320,
+// ─────────────────────────────────────────────────────────────────────────────
+let end_note = Text("Morph auto-hides source & restores target  |  Text morph!  |  ~11s",
+    x: 0, y: -310,
     font: font, size: 13,
     fill: [0.3, 0.3, 0.4, 1.0])
-FadeIn(end_note, duration: 0.5, delay: 26.5, easing: "ease_out_sine")
+FadeIn(end_note, duration: 0.5, delay: 10.5, easing: "ease_out_sine")

@@ -51,6 +51,25 @@ Higher sample counts produce smoother motion blur at the cost of linearly increa
 
 ---
 
+## SetVisibility
+
+```scalar
+SetVisibility(node_id, visible)
+```
+
+Shows or hides a node. `visible` is a boolean (`true` or `false`).
+
+### Example
+
+```scalar
+let shape = Circle(0, 0, 50)
+SetVisibility(shape, false)  // hide
+// ... later ...
+SetVisibility(shape, true)   // show
+```
+
+---
+
 ## Example
 
 ```scalar

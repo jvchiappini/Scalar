@@ -52,6 +52,23 @@ pub enum AnimationKind {
         /// First-frame initializer flag (sets fill transparent).
         initialized: bool,
     },
+    /// Path morphing: interpolates the node's path commands from `source_points`
+    /// to `target_points`. Both are aligned (padded to the same length) at
+    /// registration time.
+    ///
+    /// When the morph starts (first progress > 0), the `source_ids` nodes are
+    /// automatically hidden so they don't overlap with the morphing result.
+    ///
+    /// When the morph completes, `restore_cmds` are written back to the target
+    /// node so the final shape is pixel-perfect (not a polyline approximation).
+    Morph {
+        source_points: Vec<ferrous_engine::glam::Vec2>,
+        target_points: Vec<ferrous_engine::glam::Vec2>,
+        /// Node IDs to hide when the morph starts (the source shape).
+        source_ids: Vec<u64>,
+        /// Original target path commands to restore on completion.
+        restore_cmds: Vec<ferrous_engine::PathCommand>,
+    },
 }
 
 /// A registered animation entry.
@@ -195,6 +212,13 @@ impl Bridge {
                             );
                         }
                     }
+                    AnimationKind::Morph { source_ids, .. } => {
+                        // Hide the source shape nodes when morph starts
+                        // so they don't overlap with the morphing target.
+                        for sid in source_ids {
+                            let _ = renderer.set_visible(NodeId(*sid), false);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -333,23 +357,15 @@ impl Bridge {
                     const SPLIT: f32 = 0.6;
                     if eased <= SPLIT {
                         // Phase 1: reveal sub-path segments one by one along the outline.
-                        // The eased progress within this phase determines how many
-                        // segments are visible — they appear in traversal order.
                         let seg_progress = (eased / SPLIT).min(1.0);
                         let total = segment_ids.len();
-                        let num_to_show = if total == 0 {
-                            0
-                        } else {
-                            // Use floor() so each segment gets roughly equal time.
-                            // ceil() would jump from 0 to multiple segments in one frame.
+                        let num_to_show = if total == 0 { 0 } else {
                             (seg_progress * total as f32).floor() as usize
                         };
                         for (i, sid) in segment_ids.iter().enumerate() {
                             let _ = renderer.set_visible(NodeId(*sid), i < num_to_show);
                         }
                     } else {
-                        // Phase 2: all segments visible, fill fades in
-                        // Make the fill entity visible (it was hidden at creation)
                         let _ = renderer.set_visible(NodeId(*fill_entity_id), true);
                         let fill_t = ((eased - SPLIT) / (1.0 - SPLIT)).min(1.0);
                         let alpha = fill_t * fill_rgba[3];
@@ -357,11 +373,21 @@ impl Bridge {
                             NodeId(*fill_entity_id),
                             [fill_rgba[0], fill_rgba[1], fill_rgba[2], alpha],
                         );
-                        // Ensure all stroke segments are visible
                         for sid in segment_ids {
                             let _ = renderer.set_visible(NodeId(*sid), true);
                         }
                     }
+                }
+                AnimationKind::Morph { source_points, target_points, .. } => {
+                    // Linearly interpolate each point: result = lerp(source, target, eased)
+                    use ferrous_engine::glam::Vec2;
+                    let interp: Vec<Vec2> = source_points
+                        .iter()
+                        .zip(target_points.iter())
+                        .map(|(s, t)| Vec2::lerp(*s, *t, eased))
+                        .collect();
+                    let pd = points_to_path_data(&interp);
+                    let _ = renderer.set_path_data(NodeId(anim.node_id.into()), pd);
                 }
                 } // match &anim.kind
             }
@@ -369,6 +395,12 @@ impl Bridge {
             if progress < 1.0 {
                 i += 1; // keep this animation
             } else {
+                // Before removing, restore the original target path for Morph
+                // so the final shape is pixel-perfect (not a polyline approx).
+                if let AnimationKind::Morph { restore_cmds, .. } = &anim.kind {
+                    let pd = ferrous_engine::PathData { commands: restore_cmds.clone() };
+                    let _ = renderer.set_path_data(NodeId(anim.node_id.into()), pd);
+                }
                 anims.swap_remove(i); // remove completed, don't increment i
             }
         }
@@ -378,4 +410,189 @@ impl Bridge {
     pub fn track_line(&self, node_id: u32, data: LineData) {
         self.line_data.borrow_mut().insert(node_id as u64, data);
     }
+}
+
+// ── Morph helpers ──────────────────────────────────────────────────────────
+
+/// Evaluates a cubic Bézier curve at parameter `t`.
+fn cubic_bezier_point(
+    p0: ferrous_engine::glam::Vec2,
+    p1: ferrous_engine::glam::Vec2,
+    p2: ferrous_engine::glam::Vec2,
+    p3: ferrous_engine::glam::Vec2,
+    t: f32,
+) -> ferrous_engine::glam::Vec2 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let mt = 1.0 - t;
+    let mt2 = mt * mt;
+    let mt3 = mt2 * mt;
+    p0 * mt3 + p1 * 3.0 * mt2 * t + p2 * 3.0 * mt * t2 + p3 * t3
+}
+
+/// Samples a path uniformly at `num_samples` evenly-spaced points.
+///
+/// Cubics are subdivided into 8-line-segment approximations so the sampling
+/// is smooth. `MoveTo` and `Close` are handled correctly — `Close` closes
+/// back to the most recent `MoveTo`.
+///
+/// This produces a clean, evenly-spaced polyline regardless of the original
+/// path's vertex density. Circle ↔ Rect morphs look smooth because both
+/// get the same number of uniformly-spaced sample points.
+fn sample_path_uniformly(
+    cmds: &[ferrous_engine::PathCommand],
+    num_samples: usize,
+) -> Vec<ferrous_engine::glam::Vec2> {
+    use ferrous_engine::PathCommand::*;
+    use ferrous_engine::glam::Vec2;
+
+    if num_samples == 0 || cmds.is_empty() {
+        return vec![Vec2::ZERO; num_samples.max(1)];
+    }
+
+    // Step 1: build dense polyline (flatten curves)
+    let mut polyline: Vec<Vec2> = Vec::new();
+    let mut cursor = Vec2::ZERO;
+    let mut start = Vec2::ZERO;
+    const CURVE_STEPS: usize = 8;
+
+    for cmd in cmds {
+        match cmd {
+            MoveTo(p) => {
+                cursor = *p;
+                start = *p;
+                polyline.push(*p);
+            }
+            LineTo(p) => {
+                polyline.push(*p);
+                cursor = *p;
+            }
+            CubicTo(c1, c2, p) => {
+                for i in 1..=CURVE_STEPS {
+                    let t = i as f32 / CURVE_STEPS as f32;
+                    polyline.push(cubic_bezier_point(cursor, *c1, *c2, *p, t));
+                }
+                cursor = *p;
+            }
+            Close => {
+                if cursor.distance_squared(start) > 0.0001 {
+                    polyline.push(start);
+                }
+                cursor = start;
+            }
+        }
+    }
+
+    // Step 2: cumulative segment lengths
+    let n_pts = polyline.len();
+    let mut cum_len = vec![0.0f32; n_pts];
+    for i in 1..n_pts {
+        cum_len[i] = cum_len[i - 1] + polyline[i].distance(polyline[i - 1]);
+    }
+    let total_len = cum_len[n_pts - 1];
+
+    if total_len < 0.0001 {
+        return vec![polyline[0]; num_samples];
+    }
+
+    // Step 3: sample evenly-spaced points
+    let mut samples = Vec::with_capacity(num_samples);
+    let mut seg_idx = 0;
+    for s in 0..num_samples {
+        let target_dist = (s as f32 / (num_samples - 1).max(1) as f32) * total_len;
+        // Advance segment index until we reach or pass target_dist
+        while seg_idx + 1 < n_pts - 1 && cum_len[seg_idx + 1] < target_dist {
+            seg_idx += 1;
+        }
+        if seg_idx + 1 >= n_pts {
+            samples.push(polyline[n_pts - 1]);
+        } else {
+            let seg_start = cum_len[seg_idx];
+            let seg_len = cum_len[seg_idx + 1] - seg_start;
+            let t = if seg_len > 0.0 {
+                ((target_dist - seg_start) / seg_len).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            samples.push(polyline[seg_idx].lerp(polyline[seg_idx + 1], t));
+        }
+    }
+    samples
+}
+
+/// Aligns two point sequences to the same length by padding the shorter one
+/// with its last point.
+fn align_point_sequences(
+    a: &[ferrous_engine::glam::Vec2],
+    b: &[ferrous_engine::glam::Vec2],
+) -> (Vec<ferrous_engine::glam::Vec2>, Vec<ferrous_engine::glam::Vec2>) {
+    use ferrous_engine::glam::Vec2;
+    let max_len = a.len().max(b.len());
+    let pad = |v: &[Vec2], len: usize| -> Vec<Vec2> {
+        if v.len() >= len {
+            v.to_vec()
+        } else {
+            let last = v.last().copied().unwrap_or(Vec2::ZERO);
+            let mut out = v.to_vec();
+            out.resize(len, last);
+            out
+        }
+    };
+    (pad(a, max_len), pad(b, max_len))
+}
+
+/// Reconstructs a `PathData` from linearly-interpolated points.
+/// Result: MoveTo(first_pt), LineTo(intermediate_pts...), Close.
+fn points_to_path_data(pts: &[ferrous_engine::glam::Vec2]) -> ferrous_engine::PathData {
+    use ferrous_engine::PathCommand::*;
+    let cmds = if pts.is_empty() {
+        vec![]
+    } else {
+        let mut cmds = vec![MoveTo(pts[0])];
+        for p in &pts[1..] {
+            cmds.push(LineTo(*p));
+        }
+        cmds.push(Close);
+        cmds
+    };
+    ferrous_engine::PathData { commands: cmds }
+}
+
+/// Extracts a flat `Vec<u64>` of node IDs from a Scalar `Value`.
+///
+/// Accepts:
+/// - `Value::NodeId(id)` → `vec![id]`
+/// - `Value::Number(n)` → `vec![n as u64]`
+/// - `Value::List([NodeId, ...])` → all NodeIds and Numbers in the list
+pub fn value_to_ids(val: &scalar_lang::Value) -> Result<Vec<u64>, String> {
+    use scalar_lang::Value;
+    match val {
+        Value::List(list) => {
+            let ids: Vec<u64> = list.iter().filter_map(|v| match v {
+                Value::NodeId(id) => Some(*id as u64),
+                Value::Number(n) => Some(*n as u64),
+                _ => None,
+            }).collect();
+            if ids.is_empty() {
+                Err("list contains no valid node IDs".to_string())
+            } else {
+                Ok(ids)
+            }
+        }
+        Value::NodeId(id) => Ok(vec![*id as u64]),
+        Value::Number(n) => Ok(vec![*n as u64]),
+        _ => Err("expected a NodeId, Number, or [NodeId]".to_string()),
+    }
+}
+
+/// Looks up a single node by ID and returns its `PathCommand` list.
+pub fn node_to_path_commands(
+    id: u64,
+    renderer: &ferrous_engine::Renderer,
+) -> Result<Vec<ferrous_engine::PathCommand>, String> {
+    let entity = renderer.node_map.get(&NodeId(id))
+        .ok_or_else(|| format!("node {} not found", id))?;
+    let pd = renderer.world.ecs.get::<ferrous_engine::PathData>(*entity)
+        .ok_or_else(|| format!("node {} has no PathData", id))?;
+    Ok(pd.commands.clone())
 }

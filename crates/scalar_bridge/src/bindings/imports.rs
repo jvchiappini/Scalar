@@ -386,7 +386,17 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
             let upem = face.units_per_em() as f32;
             let scale = font_size / upem;
 
-            let mut combined_cmds: Vec<PathCommand> = Vec::new();
+            // Build per-glyph kwargs (remove font/size/position, pass through rest)
+            let mut glyph_kwargs = kwargs.clone();
+            glyph_kwargs.remove("font");
+            glyph_kwargs.remove("size");
+            glyph_kwargs.remove("x");
+            glyph_kwargs.remove("y");
+
+            let sk = shapes::parse_shape_kwargs(&glyph_kwargs);
+            let mut r = renderer.borrow_mut();
+
+            let mut glyph_ids: Vec<Value> = Vec::new();
             let mut cursor_x: f32 = 0.0;
 
             for ch in text_str.chars() {
@@ -406,7 +416,7 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
 
                 let adv = face.glyph_hor_advance(gid).unwrap_or(0) as f32;
 
-                // Build an outline for this glyph.
+                // Build an outline for this glyph with cursor_x baked in
                 let mut builder = GlyphPathBuilder {
                     cmds: Vec::new(),
                     cursor_x,
@@ -414,28 +424,22 @@ fn register_text(env: &mut Environment, renderer: Rc<RefCell<Renderer>>, fonts: 
                     cur_x: 0.0,
                     cur_y: 0.0,
                 };
-                // outline_glyph returns None for glyphs with no outline (e.g. space)
                 let _ = face.outline_glyph(gid, &mut builder);
 
-                combined_cmds.extend(builder.cmds);
+                // Spawn a separate entity per glyph (enables per-glyph morphing)
+                if !builder.cmds.is_empty() {
+                    let id = shapes::spawn_2d_shape_with_kwargs(&mut r, x, y, builder.cmds, &sk);
+                    glyph_ids.push(Value::NodeId(id));
+                }
+
                 cursor_x += adv * scale;
             }
 
-            if combined_cmds.is_empty() {
+            if glyph_ids.is_empty() {
                 return Err("Text: no glyphs could be rendered (empty string or unsupported chars)".to_string());
             }
 
-            let mut full_kwargs = kwargs.clone();
-            full_kwargs.remove("font");
-            full_kwargs.remove("size");
-            full_kwargs.remove("x");
-            full_kwargs.remove("y");
-
-            let sk = shapes::parse_shape_kwargs(&full_kwargs);
-            let mut r = renderer.borrow_mut();
-            let id = shapes::spawn_2d_shape_with_kwargs(&mut r, x, y, combined_cmds, &sk);
-
-            Ok(Value::NodeId(id))
+            Ok(Value::List(glyph_ids))
         })),
     );
 }

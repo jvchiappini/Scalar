@@ -6,7 +6,7 @@ Functions for file import and vector text rendering:
 |----------|---------|-------------|
 | `SVGImport(path)` | `List[NodeId]` | Load an SVG file and render all `<path>` elements |
 | `FontImport(path)` | `Number` (index) | Load a TrueType/OpenType font for text rendering |
-| `Text(str, x, y [, ...kwargs])` | `NodeId` | Render a string as vector paths using a loaded font |
+| `Text(str, x, y [, ...kwargs])` | `[NodeId]` | Render a string as vector paths using a loaded font (one `NodeId` per glyph) |
 
 For animated text (character-by-character reveal), see [`WriteText`](animation.md#writetext) in the animation docs.
 
@@ -138,12 +138,23 @@ Internally, `Text()`:
    - `C1 = Q0 + 2/3·(Q1 - Q0)`
    - `C2 = Q2 + 2/3·(Q1 - Q2)`
 4. Positions glyphs by their advance width
-5. Combines all glyph outlines into a single PathData
-6. Spawns a single `spawn_2d_path` entity with fill/stroke/transform applied
+5. Spawns **one entity per glyph** with the glyph's path and fill/stroke/transform applied
+6. Returns `[NodeId]` — a list with one `NodeId` per glyph
 
 This means text is **not rasterized** — it's pure vector geometry that can be
 scaled, rotated, and styled like any other shape. The font file is parsed for
 its TrueType outlines but no GPU atlas or MSDF texture is required.
+
+Because `Text()` now returns per-glyph `NodeId`s, you can animate each character
+individually — including per-glyph morphing! For example:
+
+```scalar
+let hello = Text("Hello", x: 0, y: 0, font: f, size: 48)
+let world = Text("World", x: 0, y: 0, font: f, size: 48)
+SetVisibility(world, false)
+Animate(world, "Morph", into: hello, duration: 1.0)
+// Each letter morphs: H→W, e→o, l→r, l→l, o→d
+```
 
 ---
 
@@ -163,7 +174,10 @@ embedded at compile time.
 shape at its correct position within the formula. This enables per-glyph /
 per-piece animation (like Manim's `Write`).
 
-> **Note:** Unlike `Text()`, `Tex()` uses its own math fonts internally (the 19
+> **Note:** Like `Text()`, `Tex()` also returns `[NodeId]` — one per display item.
+> Both support per-glyph morphing via `Animate(targets, "Morph", into: source)`.
+>
+> Unlike `Text()`, `Tex()` uses its own math fonts internally (the 19
 > KaTeX TrueType fonts) — it does **not** require or use a `FontImport()` font.
 
 The pipeline is:

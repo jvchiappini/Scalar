@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use scalar_lang::{Environment, Value};
 use ferrous_engine::{Renderer, NodeId};
-use crate::{LineData, AnimationEntry, AnimationKind};
+use crate::{LineData, AnimationEntry, AnimationKind, sample_path_uniformly};
 use crate::bindings::imports::{FontEntry, glyph_paths_for_text, extract_path_segments, subdivide_segments};
 use crate::bindings::shapes::{self, num, kwarg_num};
 
@@ -24,7 +24,8 @@ pub fn register(
     register_move_to(env, animations.clone());
     register_draw_then_fill(env, animations.clone());
     register_write_text(env, renderer.clone(), animations.clone(), fonts.clone());
-    register_reveal_text(env, renderer.clone(), animations.clone(), fonts);
+    register_reveal_text(env, renderer.clone(), animations.clone(), fonts.clone());
+    register_morph(env, renderer.clone(), animations.clone());
 }
 
 /// Extracts a node ID from an argument (NodeId or Number).
@@ -277,6 +278,23 @@ fn register_animate(
 
             let eff_duration = per_line_override.unwrap_or(duration);
 
+            // ── Pre-parse source IDs for Morph effect ─────────────────
+            // The `into:` kwarg can be a single NodeId or a [NodeId] (e.g. from Tex()).
+            let morph_source_ids: Option<Vec<u64>> = if effect == "Morph" {
+                Some(match kwargs.get("into") {
+                    Some(val) => crate::value_to_ids(val).map_err(|e| {
+                        format!("Animate(..., \"Morph\", into: ...): {}", e)
+                    })?,
+                    None => return Err(
+                        "Animate(..., \"Morph\", into: source_node): \
+                         'into' kwarg is required"
+                        .to_string(),
+                    ),
+                })
+            } else {
+                None
+            };
+
             // Compute per-element delay: if explicit stagger > 0 use it;
             // otherwise for old-style use per_line or duration/count.
             let per_item_delay = |i: usize| -> f64 {
@@ -372,16 +390,40 @@ fn register_animate(
                         }
                     }
                     "LineDraw" => AnimationKind::LineDraw,
+                    "Morph" => {
+                        let morph_src = morph_source_ids.as_ref().expect("already checked");
+                        // Pair target[i] with source[i], or last source if out of range
+                        let src_id = if i < morph_src.len() {
+                            morph_src[i]
+                        } else {
+                            *morph_src.last().unwrap()
+                        };
+                        let all_src_ids = morph_src.clone();
+                        let r = ren.borrow_mut();
+                        let target_cmds = crate::node_to_path_commands(*nid, &r)
+                            .map_err(|e| format!("Morph target #{}: {}", i, e))?;
+                        let source_cmds = crate::node_to_path_commands(src_id, &r)
+                            .map_err(|e| format!("Morph source #{}: {}", i, e))?;
+                        let num_samples = ((source_cmds.len() + target_cmds.len()) * 10).max(100);
+                        let source_points = sample_path_uniformly(&source_cmds, num_samples);
+                        let target_points = sample_path_uniformly(&target_cmds, num_samples);
+                        AnimationKind::Morph {
+                            source_points,
+                            target_points,
+                            source_ids: all_src_ids,
+                            restore_cmds: target_cmds,
+                        }
+                    }
                     other => {
                         return Err(format!(
                             "Animate: unknown effect '{other}'. \
                              Available effects: FadeIn, FadeOut, Grow, Shrink, \
-                             DrawThenFill, MoveTo, LineDraw"
+                             DrawThenFill, MoveTo, LineDraw, Morph"
                         ));
                     }
                 };
 
-                let was_hidden = effect == "LineDraw";
+                let was_hidden = effect == "LineDraw" || effect == "Morph";
 
                 let entry_duration = per_line_override.unwrap_or(duration);
                 anims.push(AnimationEntry {
@@ -966,6 +1008,107 @@ fn register_reveal_text(
             }
 
             Ok(Value::List(node_ids))
+        })),
+    );
+}
+
+// ─── Morph ────────────────────────────────────────────────────────────────────
+
+/// Morph(target, source, duration: 1.0, delay: 0.0, easing: "ease_out_cubic")
+///
+/// Animates the path of `target` so it morphs from `source`'s shape into
+/// `target`'s own shape. Both nodes must have `PathData` (created by any shape
+/// function: `Circle`, `Rect`, `Polygon`, `Tex()`, etc.).
+///
+/// The morph works by extracting all vertices/control points from both paths,
+/// padding the shorter sequence to match, and linearly interpolating each point
+/// every frame. The reconstructed path uses MoveTo/LineTo/Close so curved
+/// segments become polylines during the morph — a common approach in Manim-style
+/// animations.
+///
+/// # Arguments
+/// * `target` — NodeId of the node to animate (morphs into its own final shape)
+/// * `source` — NodeId of the node whose shape is the starting state
+///
+/// # Example
+/// ```scalar
+/// a = Circle(100, 100, 50)
+/// b = Rect(100, 100, 120, 80)
+/// Morph(b, a, duration: 2.0)    // rect morphs from circle
+/// ```
+fn register_morph(
+    env: &mut Environment,
+    renderer: Rc<RefCell<Renderer>>,
+    animations: Rc<RefCell<Vec<AnimationEntry>>>,
+) {
+    let ren = renderer.clone();
+    let an = animations.clone();
+    env.define(
+        "Morph".to_string(),
+        Value::NativeFunction(Rc::new(move |args, kwargs: HashMap<String, Value>| {
+            if args.len() < 2 {
+                return Err("Morph(target, source, ...): requires at least 2 arguments (target and source node IDs)".to_string());
+            }
+
+            let ap = parse_anim_params(&kwargs);
+
+            let r = ren.borrow_mut();
+
+            // Resolve all target node IDs from first argument (NodeId, Number, or [NodeId])
+            let target_ids: Vec<u64> = crate::value_to_ids(&args[0])?;
+            // Resolve all source node IDs from second argument
+            let source_ids: Vec<u64> = crate::value_to_ids(&args[1])?;
+
+            if target_ids.is_empty() {
+                return Err("Morph: target has no valid node IDs".to_string());
+            }
+            if source_ids.is_empty() {
+                return Err("Morph: source has no valid node IDs".to_string());
+            }
+
+            // Create one Morph entry per pair, aligning lengths by repeating last source
+            let max_len = target_ids.len().max(source_ids.len());
+            let get_source = |i: usize| -> u64 {
+                if i < source_ids.len() { source_ids[i] } else { *source_ids.last().unwrap() }
+            };
+
+            let mut anims = an.borrow_mut();
+            for i in 0..target_ids.len() {
+                let tgt_id = target_ids[i];
+                let src_id = get_source(i);
+
+                // Extract PathCommands for target glyph
+                let target_cmds = match crate::node_to_path_commands(tgt_id, &r) {
+                    Ok(cmds) => cmds,
+                    Err(e) => return Err(format!("Morph target #{}: {}", i, e)),
+                };
+                // Extract PathCommands for source glyph
+                let source_cmds = match crate::node_to_path_commands(src_id, &r) {
+                    Ok(cmds) => cmds,
+                    Err(e) => return Err(format!("Morph source #{}: {}", i, e)),
+                };
+
+                let num_samples = ((source_cmds.len() + target_cmds.len()) * 10).max(100);
+                let source_points = sample_path_uniformly(&source_cmds, num_samples);
+                let target_points = sample_path_uniformly(&target_cmds, num_samples);
+
+                anims.push(AnimationEntry {
+                    node_id: tgt_id,
+                    duration: ap.duration,
+                    delay: ap.delay,
+                    start_time: None,
+                    easing: ap.easing,
+                    kind: AnimationKind::Morph {
+                        source_points,
+                        target_points,
+                        source_ids: source_ids.clone(),
+                        restore_cmds: target_cmds.clone(),
+                    },
+                    was_hidden: true,  // show on first morph frame (user hides target beforehand)
+                });
+            }
+
+            Ok(Value::Number(target_ids.len() as f64))
         })),
     );
 }

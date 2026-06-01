@@ -83,6 +83,13 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// User-defined function: `fn name(params) { body }`
+    FnDef {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+        span: Span,
+    },
 }
 
 /// Abstract Syntax Tree node for Scalar.
