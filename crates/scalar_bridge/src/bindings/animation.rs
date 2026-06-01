@@ -7,6 +7,13 @@ use crate::{LineData, AnimationEntry, AnimationKind, sample_path_uniformly};
 use crate::bindings::imports::{FontEntry, glyph_paths_for_text, extract_path_segments, subdivide_segments};
 use crate::bindings::shapes::{self, num, kwarg_num};
 
+thread_local! {
+    /// Global timeline cursor for `Wait()` sequencing.
+    /// Advances each time `Wait(t)` is called. All animation functions
+    /// read this cursor and add it to their computed delay.
+    static TIMELINE_CURSOR: std::cell::Cell<f64> = std::cell::Cell::new(0.0);
+}
+
 pub fn register(
     env: &mut Environment,
     renderer: Rc<RefCell<Renderer>>,
@@ -26,6 +33,7 @@ pub fn register(
     register_write_text(env, renderer.clone(), animations.clone(), fonts.clone());
     register_reveal_text(env, renderer.clone(), animations.clone(), fonts.clone());
     register_morph(env, renderer.clone(), animations.clone());
+    register_wait(env);
 }
 
 /// Extracts a node ID from an argument (NodeId or Number).
@@ -86,7 +94,10 @@ struct AnimParams {
 
 fn parse_anim_params(kwargs: &HashMap<String, Value>) -> AnimParams {
     let duration = kwarg_num(kwargs, "duration", 1.0);
-    let delay = kwarg_num(kwargs, "delay", 0.0);
+    let mut delay = kwarg_num(kwargs, "delay", 0.0);
+    // Add global timeline cursor (set by Wait()) so sequential scripts
+    // automatically chain delays without manual arithmetic.
+    delay += TIMELINE_CURSOR.with(|c| c.get());
     let easing = match kwargs.get("easing") {
         Some(Value::String(s)) => crate::easing::Easing::from_str(s),
         _ => crate::easing::Easing::EaseOutCubic,
@@ -1109,6 +1120,39 @@ fn register_morph(
             }
 
             Ok(Value::Number(target_ids.len() as f64))
+        })),
+    );
+}
+
+// ─── Wait ──────────────────────────────────────────────────────────────────────
+
+/// Wait(t)
+///
+/// Advances the global timeline cursor by `t` seconds. All subsequently
+/// registered animations automatically have their delays adjusted so they
+/// appear to start after the cumulative Wait time.
+///
+/// This enables manual timeline choreography without explicit delay arguments:
+///
+/// ```scalar
+/// FadeIn(a)          # starts at cursor=0
+/// Wait(1.5)
+/// FadeOut(a)         # starts at cursor=1.5
+/// ```
+fn register_wait(env: &mut Environment) {
+    env.define(
+        "Wait".to_string(),
+        Value::NativeFunction(Rc::new(|args, _kwargs| {
+            let t = match args.first() {
+                Some(Value::Number(n)) => *n,
+                Some(other) => return Err(format!("Wait() requires a number, got {:?}", other)),
+                None => 1.0, // default: wait 1 second
+            };
+            if t < 0.0 {
+                return Err(format!("Wait() duration cannot be negative, got {}", t));
+            }
+            TIMELINE_CURSOR.with(|c| c.set(c.get() + t));
+            Ok(Value::Number(TIMELINE_CURSOR.with(|c| c.get())))
         })),
     );
 }

@@ -86,7 +86,22 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
                 Expr::Binary { left: Box::new(left), op, right: Box::new(right), span }
             });
 
-        let base = additive;
+        // Comparison operators (<, <=, >, >=, ==, !=) — lowest precedence
+        let cmp_op = just(Token::Lt).to(crate::ast::BinaryOp::Lt)
+            .or(just(Token::Le).to(crate::ast::BinaryOp::Le))
+            .or(just(Token::Gt).to(crate::ast::BinaryOp::Gt))
+            .or(just(Token::Ge).to(crate::ast::BinaryOp::Ge))
+            .or(just(Token::Eq2).to(crate::ast::BinaryOp::Eq))
+            .or(just(Token::Ne).to(crate::ast::BinaryOp::Ne));
+
+        let comparison = additive.clone()
+            .then(cmp_op.then(additive).repeated())
+            .foldl(|left, (op, right)| {
+                let span = left.span().start..right.span().end;
+                Expr::Binary { left: Box::new(left), op, right: Box::new(right), span }
+            });
+
+        let base = comparison;
 
         // Method calls
         base.clone().then(
@@ -156,11 +171,53 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
             .then_ignore(just(Token::Semi).or_not())
             .map_with_span(|(name, value), span| Stmt::Assign { name, value, span });
 
+        // Function definition: fn name(params) { body }
+        let fn_def = just(Token::Fn)
+            .ignore_then(select! { Token::Ident(i) => i })
+            .then(
+                select! { Token::Ident(p) => p }
+                    .separated_by(just(Token::Comma))
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+            )
+            .then(block.clone())
+            .then_ignore(just(Token::Semi).or_not())
+            .map_with_span(|((name, params), body), span| Stmt::FnDef { name, params, body, span });
+
+        // Conditional: if expr { stmt* } else { stmt* }
+        let if_stmt = just(Token::If)
+            .ignore_then(expr.clone())
+            .then(block.clone())
+            .then(
+                just(Token::Else)
+                    .ignore_then(block.clone())
+                    .or_not()
+            )
+            .then_ignore(just(Token::Semi).or_not())
+            .map_with_span(|((condition, then_body), else_body), span| {
+                Stmt::If {
+                    condition,
+                    then_body,
+                    else_body: else_body.unwrap_or_default(),
+                    span,
+                }
+            });
+
+        // Return: return expr?   (semicolons optional)
+        let return_stmt = just(Token::Return)
+            .then(
+                expr.clone()
+                    .then_ignore(just(Token::Semi).or_not())
+                    .map(Some)
+                    .or(just(Token::Semi).or_not().map(|_| None))
+            )
+            .map_with_span(|(_, value), span| Stmt::Return { value, span });
+
         let expr_stmt = expr.clone()
             .then_ignore(just(Token::Semi).or_not())
             .map(Stmt::Expr);
 
-        let_stmt.or(for_stmt).or(import_stmt).or(assign_stmt).or(expr_stmt)
+        let_stmt.or(for_stmt).or(import_stmt).or(fn_def)
+            .or(if_stmt).or(return_stmt).or(assign_stmt).or(expr_stmt)
     });
 
     stmt.repeated()

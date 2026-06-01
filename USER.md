@@ -14,11 +14,12 @@
 
 ## Current Priorities
 - Building a pro-level animation system that surpasses Manim
-- **Implement user-defined functions (`fn`)** — the foundation for abstraction and reuse
-- **Implement `Wait()` + `Play()`** — professional choreography sequencing
-- Adding missing objects: Arrow, Dot, NumberPlane, Brace
+- **`Rotate()` / `Spin()`** — rotation animation (P1, next up)
+- **Arrow, Dot, NumberPlane, Brace** — new shape objects (P1)
+- **`&&` / `||` logical operators** — compound conditions for `if` (P0)
 - Fixing `Grow` animation (currently a no-op)
 - Polish morph system: per-glyph text morph working, test on Windows
+- **Done:** `fn`, `if`/`else`, `return`, `Wait()`, comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`)
 
 ## Project Values
 - Code must compile cleanly (no warnings from our crates)

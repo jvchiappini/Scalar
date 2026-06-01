@@ -33,9 +33,8 @@ All animation functions (except `SetLineProgress` and `SetLineCap`) accept these
 | `delay` | Number | `0.0` | Delay before animation starts |
 | `easing` | String | `"ease_out_cubic"` | Easing function name (see [Easing](../api/easing.md)) |
 
----
-
-## SetLineProgress
+> **Timeline cursor:** All animation functions automatically add the global
+> timeline cursor (set by `Wait()`) to their `delay`. See [`Wait()`](#wait--timeline-cursor).
 
 ```scalar
 SetLineProgress(node_id, progress)
@@ -425,8 +424,68 @@ Animate(world, "Morph", into: hello, duration: 1.2, easing: "ease_in_out_cubic")
 ```
 
 ---
+## Wait — Timeline Cursor
 
-## How Animations Work
+```scalar
+Wait(t)   // t is Number (default 1.0)
+Wait()    // defaults to 1.0 seconds
+```
+
+Advances the global **timeline cursor** by `t` seconds. All animation functions
+automatically read the cursor and add it to their `delay`, creating a sequential
+timeline without manual arithmetic.
+
+Returns the new cursor value (total elapsed time).
+
+> **cursor += t** — the cursor is a monotonically increasing f64, shared by all
+> animation functions. It starts at `0.0` at script load and is only advanced
+> by explicit `Wait()` calls.
+
+### Examples
+
+```scalar
+// Both start at cursor=0 (parallel)
+FadeIn(a, duration: 1.0)
+Grow(b, duration: 1.5)
+
+Wait(1.5)                    // cursor = 1.5 (wait for longest animation)
+
+// Now sequential after Wait
+FadeOut(a, duration: 1.0)   // starts at cursor=1.5
+Wait(1.0)                    // cursor = 2.5
+FadeIn(c, duration: 1.0)    // starts at cursor=2.5
+```
+
+This replaces explicit delay arithmetic:
+
+```scalar
+// Without Wait (manual delay management):
+FadeIn(a)
+Grow(b)
+FadeOut(a, delay: 1.5)      // must match longest duration manually
+FadeIn(c, delay: 2.5)
+
+// With Wait (automatic):
+FadeIn(a)
+Grow(b)
+Wait(1.5)
+FadeOut(a)
+Wait(1.0)
+FadeIn(c)
+```
+
+The return value can be used for debugging or conditional logic:
+
+```scalar
+let t = Wait(0.5)            // t = 0.5
+```
+
+### Errors
+
+- Returns `Err` if `t < 0` (negative durations are not allowed).
+- Returns `Err` if argument is not a Number.
+
+---
 
 All timed animations use the following lifecycle:
 1. On the first frame where `time >= delay`, `start_time` is initialized

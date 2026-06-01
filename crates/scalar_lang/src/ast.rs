@@ -8,6 +8,13 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    // Comparison
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +95,18 @@ pub enum Stmt {
         name: String,
         params: Vec<String>,
         body: Vec<Stmt>,
+        span: Span,
+    },
+    /// Conditional: `if cond { then_body } else { else_body }`
+    If {
+        condition: Expr,
+        then_body: Vec<Stmt>,
+        else_body: Vec<Stmt>,
+        span: Span,
+    },
+    /// Early return: `return expr?`
+    Return {
+        value: Option<Expr>,
         span: Span,
     },
 }

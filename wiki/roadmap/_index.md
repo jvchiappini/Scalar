@@ -11,7 +11,7 @@
 | Priority | Feature | Impact | Effort | Area |
 |----------|---------|--------|--------|------|
 | 🔥 P0 | **Functions (`fn`)** | Foundation for abstraction, reuse, libraries | Medium | Language |
-| 🔥 P0 | **`Wait()` + `Play()`** | Professional choreography sequencing | Medium | Animation |
+| 🔥 P0 | **`Wait()` ✅ / `Play()` ⏳** | Professional choreography sequencing | Medium | Animation |
 | 🔥 P1 | **`Arrow` / `Dot` / `NumberPlane`** | Most-missed Manim objects | Medium | Shapes |
 | 🔥 P1 | **`Rotate()` / `Spin()`** | Essential animation missing today | Small | Animation |
 | 🧠 P2 | **`ValueTracker` + binding** | Parametric animation, Manim's magic | Large | Lang+ECS |
@@ -80,10 +80,9 @@ Sequence(
 **Design:** A timeline-based execution model where `Play()` blocks the time cursor until its animations complete. `Wait()` advances the cursor. `Sequence()` chains animations back-to-back.
 
 **Implementation steps:**
-1. Add a simulated-time cursor to the evaluator
-2. `Play()` registers animations and advances the time cursor to `max(end_times)`
-3. `Wait(t)` advances time cursor by `t`
-4. `Sequence(anim1, anim2)` runs anim1, then when done, runs anim2
+1. ✅ `Wait(t)` — implemented via thread-local `TIMELINE_CURSOR` + cursor read in `parse_anim_params()`. All animation functions automatically add the cursor to their `delay`.
+2. ⏳ `Play()` — deferred. Not strictly necessary because multiple animation calls without intervening `Wait()` already run in parallel. The pattern `Wait(max_duration)` achieves the same effect explicitly. Native function wrapper that pulls max duration from a list of function results is a future improvement.
+3. ⏳ `Sequence()` — deferred until higher demand.
 
 **Key insight:** The time cursor is separate from wall clock. The renderer still uses its own deterministic frame timing; the evaluator just pre-computes delays.
 
@@ -143,6 +142,10 @@ These are non-negotiable and apply to every feature:
 
 ## Completed Milestones
 
+- [x] **User-defined functions (`fn`)** — `fn name(params) { body }`, lexical scoping, `Value::Return` sentinel, recursion (factorial, fibonacci)
+- [x] **`if`/`else` statements** — Truthiness (`0` and `false` are falsy), optional else, `Value::Return` propagation
+- [x] **`return` statement** — Early return with optional value, sentinel propagation through loops and conditionals
+- [x] **Comparison operators** — `<`, `<=`, `>`, `>=`, `==`, `!=` (below additive in precedence), works on numbers and booleans
 - [x] **RaTeX integration** — Pure-Rust LaTeX math renderer (~99.5% KaTeX coverage)
 - [x] **Per-glyph Tex()** — `Tex()` returns `[NodeId]`, one per display item
 - [x] **Per-glyph Text()** — `Text()` returns `[NodeId]`, one per glyph

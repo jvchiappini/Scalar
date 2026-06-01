@@ -2,6 +2,7 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Token {
+    // Keywords
     #[token("let")]
     Let,
     #[token("for")]
@@ -12,6 +13,12 @@ pub enum Token {
     Import,
     #[token("fn")]
     Fn,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("return")]
+    Return,
 
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String),
@@ -49,6 +56,20 @@ pub enum Token {
 
     #[token("..")]
     Dots,
+
+    // Comparison operators (multi-char must come before single-char)
+    #[token("<=")]
+    Le,
+    #[token(">=")]
+    Ge,
+    #[token("==")]
+    Eq2,
+    #[token("!=")]
+    Ne,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
 
     #[token("{")]
     LBrace,

@@ -1,6 +1,7 @@
 use crate::ast::{Expr, BinaryOp};
 use crate::runtime::{Environment, Value};
 use crate::eval::format_err;
+use crate::eval::eval_stmt::eval_stmt;
 
 /// Evaluates an expression.
 pub fn eval_expr(expr: Expr, source: &str, env: &mut Environment) -> Result<Value, String> {
@@ -40,28 +41,76 @@ pub fn eval_expr(expr: Expr, source: &str, env: &mut Environment) -> Result<Valu
                             }
                             a / b
                         }
+                        BinaryOp::Lt => return Ok(Value::Boolean(a < b)),
+                        BinaryOp::Le => return Ok(Value::Boolean(a <= b)),
+                        BinaryOp::Gt => return Ok(Value::Boolean(a > b)),
+                        BinaryOp::Ge => return Ok(Value::Boolean(a >= b)),
+                        BinaryOp::Eq => return Ok(Value::Boolean(a == b)),
+                        BinaryOp::Ne => return Ok(Value::Boolean(a != b)),
                     };
                     Ok(Value::Number(result))
                 }
-                _ => Err(format_err(source, &span, "Binary operators require numeric operands")),
+                (Value::Boolean(a), Value::Boolean(b)) => {
+                    match op {
+                        BinaryOp::Eq => Ok(Value::Boolean(a == b)),
+                        BinaryOp::Ne => Ok(Value::Boolean(a != b)),
+                        _ => Err(format_err(source, &span, "Comparison operator not supported for booleans")),
+                    }
+                }
+                _ => {
+                    // Eq/Ne can work on any pair of same-typed values
+                    match op {
+                        BinaryOp::Eq => Ok(Value::Boolean(false)),
+                        BinaryOp::Ne => Ok(Value::Boolean(true)),
+                        _ => Err(format_err(source, &span, "Binary operators require numeric operands")),
+                    }
+                }
             }
         },
         Expr::Call { func, args, kwargs, span } => {
             let function = env.get(&func).ok_or_else(|| {
                 format_err(source, &span, format!("Undefined function: `{}`", func))
             })?;
-            if let Value::NativeFunction(f) = function {
-                let mut arg_values = Vec::new();
-                for a in args {
-                    arg_values.push(eval_expr(a, source, env)?);
+            match function {
+                Value::NativeFunction(f) => {
+                    let mut arg_values = Vec::new();
+                    for a in args {
+                        arg_values.push(eval_expr(a, source, env)?);
+                    }
+                    let mut kwarg_values = std::collections::HashMap::new();
+                    for (k, v) in kwargs {
+                        kwarg_values.insert(k, eval_expr(v, source, env)?);
+                    }
+                    f(arg_values, kwarg_values)
                 }
-                let mut kwarg_values = std::collections::HashMap::new();
-                for (k, v) in kwargs {
-                    kwarg_values.insert(k, eval_expr(v, source, env)?);
+                Value::Fn { params, body, source: fn_source } => {
+                    if !kwargs.is_empty() {
+                        return Err(format_err(source, &span,
+                            format!("User-defined function `{}` does not accept keyword arguments", func)));
+                    }
+                    // Evaluate arguments in the current environment
+                    let mut arg_values = Vec::new();
+                    for a in args {
+                        arg_values.push(eval_expr(a, source, env)?);
+                    }
+                    // Create child scope and bind parameters
+                    let mut fn_env = env.fresh_child();
+                    for (i, param) in params.iter().enumerate() {
+                        let val = arg_values.get(i).cloned().unwrap_or(Value::Number(0.0));
+                        fn_env.define(param.clone(), val);
+                    }
+                    // Evaluate the function body
+                    let mut last = Value::Number(0.0);
+                    for stmt in body {
+                        last = eval_stmt(stmt, &fn_source, &mut fn_env)?;
+                        // Unwrap Return sentinel to get the actual return value
+                        if let Value::Return(val) = &last {
+                            return Ok(*val.clone());
+                        }
+                    }
+                    Ok(last)
                 }
-                f(arg_values, kwarg_values)
-            } else {
-                Err(format_err(source, &span, format!("`{}` is not a function", func)))
+                _ => Err(format_err(source, &span, format!("`{}` is not a function", func)))
             }
         },
         Expr::MethodCall { target, method, args, kwargs, span } => {

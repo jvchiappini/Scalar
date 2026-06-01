@@ -24,6 +24,75 @@ Core language syntax, types, and conventions.
 | Method Call | `object.method(args)` | Calls a method on a NodeId |
 | Import | `import "filename.scl"` | Executes another script, merging its scope |
 | Expression | `Axes(-5, 5, -3, 3)` | Any expression evaluated as a statement |
+| **Function Definition** | `fn name(params) { body }` | Defines a reusable user function |
+| **Conditional** | `if cond { body } else { body }` | Conditional execution (else is optional) |
+| **Return** | `return expr?` | Early return from a function |
+
+## Functions (continued)
+
+- `return` statement — early return from any point in a function
+- `if/else` — conditional execution with truthiness semantics
+
+```scalar
+fn factorial(n) {
+    if n <= 1 {
+        return 1          // early return
+    } else {
+        n * factorial(n - 1)   // recursive call
+    }
+}
+factorial(5)  // returns 120
+```
+
+### `if` / `else`
+
+```scalar
+if condition { ... } else { ... }
+```
+
+- `else` is optional (if omitted and condition is false, the if statement evaluates to `0`)
+- **Truthiness**: `Number(0)` and `Boolean(false)` are falsy. Everything else is truthy.
+- The `if` statement evaluates to the last expression of the executed branch
+
+```scalar
+// Simple conditional
+if x > 0 {
+    Text("Positive", 0, 0)
+}
+
+// With else
+if score >= 90 {
+    grade = "A"
+} else {
+    grade = "B"
+}
+```
+
+### `return` Statement
+
+```scalar
+return expr
+return          // returns 0.0
+```
+
+- Immediately exits the current function and returns the given value
+- If no expression is given, returns `0.0`
+- Works inside loops and nested `if` blocks
+
+```scalar
+fn find_first(items, target) {
+    for x in items {
+        if x == target {
+            return x    // exits early
+        }
+    }
+    return 0            // not found
+}
+```
+
+### Limitations (current)
+
+- No nested function definitions (yet)
 
 ## Binary Operators
 
@@ -33,8 +102,16 @@ Core language syntax, types, and conventions.
 | `-` | Subtraction | `end - start` |
 | `*` | Multiplication | `i * 0.08` |
 | `/` | Division | `total / count` |
+| `<` | Less than | `x < 10` |
+| `<=` | Less than or equal | `n <= 1` |
+| `>` | Greater than | `score > 90` |
+| `>=` | Greater than or equal | `x >= 0` |
+| `==` | Equal | `x == 42` |
+| `!=` | Not equal | `x != 0` |
 
-Precedence (highest to lowest): `*` `/` (multiplicative), then `+` `-` (additive).
+Comparison operators return `Boolean` (`true` or `false`).
+
+Precedence (highest to lowest): `*` `/` (multiplicative), then `+` `-` (additive), then `<` `<=` `>` `>=` `==` `!=` (comparison).
 
 ```scalar
 let delay = 19.5

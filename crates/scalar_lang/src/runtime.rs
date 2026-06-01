@@ -14,12 +14,14 @@ pub enum Value {
     NativeFunction(Rc<dyn Fn(Vec<Value>, HashMap<String, Value>) -> Result<Value, String>>),
     String(String),
     Object(HashMap<String, Value>),
-    /// A user-defined function (`fn name(params) { body }`).
+/// A user-defined function (`fn name(params) { body }`).
     Fn {
         params: Vec<String>,
         body: Vec<Stmt>,
         source: String,
     },
+    /// Return sentinel for early exit from function: `return expr`.
+    Return(Box<Value>),
 }
 
 impl fmt::Debug for Value {
@@ -33,6 +35,7 @@ impl fmt::Debug for Value {
             Value::String(s) => write!(f, "String({})", s),
             Value::Object(o) => write!(f, "Object({:?})", o.keys()),
             Value::Fn { params, .. } => write!(f, "Fn({})", params.join(", ")),
+            Value::Return(v) => write!(f, "Return({:?})", v),
         }
     }
 }
@@ -89,6 +92,15 @@ impl Environment {
         Self {
             variables: HashMap::new(),
             parent: Some(parent),
+        }
+    }
+
+    /// Creates a fresh child scope, cloning the current environment as parent.
+    /// Used when calling user-defined functions.
+    pub fn fresh_child(&self) -> Self {
+        Self {
+            variables: HashMap::new(),
+            parent: Some(Rc::new(self.clone())),
         }
     }
 }

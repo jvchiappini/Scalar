@@ -10,7 +10,7 @@ Scalar is a declarative-execution language designed for visual mathematics and a
 
 | Topic | Description | File |
 |-------|-------------|------|
-| **Core Syntax** | Types, statements, kwargs, OO syntax, color constants | [syntax.md](syntax.md) |
+| **Core Syntax** | Types, statements, functions, kwargs, OO syntax, color constants | [syntax.md](syntax.md) |
 | **Axes()** | Cartesian axes with grid, ticks, arrows — full kwarg reference | [axes.md](axes.md) |
 | **Plot()** | Mathematical function plotting — full kwarg reference | [plot.md](plot.md) |
 | **Shapes** | Line, Rect, Circle — constructors and style methods | [shapes.md](shapes.md) |
