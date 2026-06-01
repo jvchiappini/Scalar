@@ -57,6 +57,7 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
 
         let atom = val.or(list);
         
+        // Unary minus
         let unary = just(Token::Minus).repeated()
             .then(call.or(atom))
             .foldr(|_op, target| {
@@ -64,7 +65,28 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
                 Expr::UnaryMinus(Box::new(target), span)
             });
 
-        let base = unary;
+        // Binary operators with precedence: multiplicative (*, /) then additive (+, -)
+        let mul_op = just(Token::Star).to(crate::ast::BinaryOp::Mul)
+            .or(just(Token::Slash).to(crate::ast::BinaryOp::Div));
+
+        let add_op = just(Token::Plus).to(crate::ast::BinaryOp::Add)
+            .or(just(Token::Minus).to(crate::ast::BinaryOp::Sub));
+
+        let multiplicative = unary.clone()
+            .then(mul_op.then(unary).repeated())
+            .foldl(|left, (op, right)| {
+                let span = left.span().start..right.span().end;
+                Expr::Binary { left: Box::new(left), op, right: Box::new(right), span }
+            });
+
+        let additive = multiplicative.clone()
+            .then(add_op.then(multiplicative).repeated())
+            .foldl(|left, (op, right)| {
+                let span = left.span().start..right.span().end;
+                Expr::Binary { left: Box::new(left), op, right: Box::new(right), span }
+            });
+
+        let base = additive;
 
         // Method calls
         base.clone().then(
@@ -74,7 +96,7 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
                 .repeated()
         )
         .foldl(|target, (method, (args, kwargs))| {
-            let span = target.span().start..target.span().end; // Optimized span
+            let span = target.span().start..target.span().end;
             Expr::MethodCall {
                 target: Box::new(target),
                 method,
@@ -93,29 +115,52 @@ fn parser() -> impl Parser<Token, Ast, Error = Simple<Token>> {
             .then_ignore(just(Token::Semi).or_not())
             .map_with_span(|(name, value), span| Stmt::Let { name, value, span });
 
+        // Shared block parser: { stmt* }
+        let block = stmt.clone()
+            .repeated()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace));
+
+        // for var in expr .. expr { stmt* }       — range loop
+        // for var in expr { stmt* }                — list iteration
         let for_stmt = just(Token::For)
             .ignore_then(select! { Token::Ident(i) => i })
             .then_ignore(just(Token::In))
             .then(expr.clone())
-            .then_ignore(just(Token::Dots))
-            .then(expr.clone())
             .then(
-                stmt.clone()
-                    .repeated()
-                    .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                // After the "in expr" part, decide: ".. end { body }" or "{ body }"
+                just(Token::Dots)
+                    .ignore_then(expr.clone())
+                    .then(block.clone())
+                    .map(|(end, body)| (Some(end), body))
+                    .or(block.clone().map(|body| (None, body)))
             )
-            .map_with_span(|(((var, start), end), body), span| Stmt::For { var, start, end, body, span });
+            .map_with_span(|((var, start), (end_opt, body)), span| {
+                if let Some(end) = end_opt {
+                    Stmt::For { var, start, end, body, span }
+                } else {
+                    Stmt::ForEach { var, list: start, body, span }
+                }
+            });
 
         let import_stmt = just(Token::Import)
             .ignore_then(select! { Token::String(s) => s })
             .then_ignore(just(Token::Semi).or_not())
             .map_with_span(|path, span| Stmt::Import(path, span));
 
+        // Assignment: ident = expr
+        // Note: order matters — assign_stmt must be tried before expr_stmt
+        // because both can start with an ident token.
+        let assign_stmt = select! { Token::Ident(i) => i }
+            .then_ignore(just(Token::Eq))
+            .then(expr.clone())
+            .then_ignore(just(Token::Semi).or_not())
+            .map_with_span(|(name, value), span| Stmt::Assign { name, value, span });
+
         let expr_stmt = expr.clone()
             .then_ignore(just(Token::Semi).or_not())
             .map(Stmt::Expr);
 
-        let_stmt.or(for_stmt).or(import_stmt).or(expr_stmt)
+        let_stmt.or(for_stmt).or(import_stmt).or(assign_stmt).or(expr_stmt)
     });
 
     stmt.repeated()

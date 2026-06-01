@@ -196,6 +196,7 @@ Each character is a separate `NodeId` — returns a `List` of NodeIds.
 | `size`         | `Number` kwarg  | `48`                 | Font size in pixels                  |
 | `duration`     | `Number` kwarg  | `1.0`                | Total animation duration             |
 | `per_char`     | `Number` kwarg  | —                    | Per-character duration (overrides `duration`) |
+| `delay`        | `Number` kwarg  | `0.0`                | Global delay before the text starts appearing |
 | `easing`       | `String` kwarg  | `"ease_out_cubic"`   | Easing for character reveal          |
 
 **Returns:** `List[NodeId]` — one NodeId per rendered character.
@@ -213,12 +214,16 @@ let chars = WriteText("Animated!", 0, 0,
 
 ## RevealText(str, x, y, font:, size:, ...kwargs)
 
-Renders text character-by-character with a "draw then fill" reveal animation
-(Manim's `DrawBorderThenFill` style). Each character first scales from 0→1
-(stroke visible, fill transparent), then fill fades from transparent → original
-color. Returns a `List` of NodeIds.
+Renders text character-by-character with a **path-by-path draw-then-fill** reveal
+(Manim's `DrawBorderThenFill` style). For each character, the outline path is
+broken into individual stroke segments that appear one by one (phase 1), then
+the fill fades in (phase 2). Returns a `List` of NodeIds (fill entity IDs).
 
-Supports the same kwargs as `WriteText`.
+Supports the same kwargs as `WriteText`, plus the additional kwarg:
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `segment_subdivisions` | `Number` | `1` | Split each path segment into N sub-segments for smoother progressive drawing (4–8 recommended for fonts) |
 
 **Example:**
 ```scalar
@@ -228,9 +233,27 @@ let chars = RevealText("Reveal!", 0, 0,
     duration: 2.0,
     fill: [0.3, 0.6, 1, 1],
     stroke: [0.2, 0.2, 0.2, 1],
-    stroke_width: 1.5)
-FadeOut(chars, duration: 0.5)
+    stroke_width: 1.5,
+    segment_subdivisions: 6)  // smoother outline for thin chars
 ```
+
+**How it works internally per character:**
+1. The glyph path is split into individual draw segments via `extract_path_segments`
+2. Segments are optionally subdivided into N sub-segments via `subdivide_segments` for smoother progressive drawing
+3. A **fill entity** is spawned (full path, fill only, no stroke) — hidden
+4. For each sub-segment, a **stroke segment entity** is spawned (segment path, stroke only, no fill) — hidden
+5. `AnimationKind::PathDrawThenFill` manages progressive segment reveal + fill fade
+
+---
+
+## DrawThenFill(node_id, duration, delay, easing, fill:)
+
+Two-phase reveal animation for any node. Phase 1 (0–60% eased progress) scales
+the node from 0→1 with fill transparent; Phase 2 (60–100%) holds scale at 1
+and fades fill in from transparent → original color.
+
+Unlike `RevealText` which does path-by-path stroke drawing, this is a simpler
+scale-based animation suitable for any existing node.
 
 ---
 
@@ -245,4 +268,7 @@ FadeOut(chars, duration: 0.5)
   captured lazily from the ECS on the first frame.
 - `DrawThenFill` also sets the fill to fully transparent on first frame and
   restores it with interpolated alpha during phase 2.
+- `PathDrawThenFill` (used by `RevealText`) spawns separate stroke segment entities
+  per character and shows them progressively during phase 1, then fades fill in
+  during phase 2. Segments appear in path traversal order.
 - Completed animations are automatically removed from the active list.

@@ -11,3 +11,10 @@ ferrous_2d = { workspace = true }
 ferrous_font = { workspace = true }
 anyhow = "1.0"
 ttf-parser = "0.25.1"
+
+# RaTeX — LaTeX math rendering
+ratex-parser = "0.1"
+ratex-layout = "0.1"
+ratex-types = "0.1"
+ratex-font = "0.1"
+ratex-katex-fonts = "0.1"

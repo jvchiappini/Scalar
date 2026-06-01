@@ -18,10 +18,32 @@ Core language syntax, types, and conventions.
 | Statement | Syntax | Description |
 |-----------|--------|-------------|
 | Variable Declaration | `let x = 10` | Binds a value to a name |
-| For Loop | `for i in 0..10 { ... }` | Iterates over a numeric range |
+| Assignment | `x = x + 1` | Reassigns an existing variable (must be previously declared) |
+| For Loop (range) | `for i in 0..10 { ... }` | Iterates `i` from `0` to `9` (exclusive end) |
+| For Loop (list) | `for item in list_expr { ... }` | Iterates over each element in a List value |
 | Method Call | `object.method(args)` | Calls a method on a NodeId |
 | Import | `import "filename.scl"` | Executes another script, merging its scope |
 | Expression | `Axes(-5, 5, -3, 3)` | Any expression evaluated as a statement |
+
+## Binary Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `+` | Addition | `delay + 0.5` |
+| `-` | Subtraction | `end - start` |
+| `*` | Multiplication | `i * 0.08` |
+| `/` | Division | `total / count` |
+
+Precedence (highest to lowest): `*` `/` (multiplicative), then `+` `-` (additive).
+
+```scalar
+let delay = 19.5
+let step = 0.08
+for part in parts {
+    FadeIn(part, duration: 0.25, delay: delay)
+    delay = delay + step          // Assignment + binary op
+}
+```
 
 ## Named Arguments (Kwargs)
 

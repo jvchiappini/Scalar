@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{Expr, BinaryOp};
 use crate::runtime::{Environment, Value};
 use crate::eval::format_err;
 
@@ -24,6 +24,27 @@ pub fn eval_expr(expr: Expr, source: &str, env: &mut Environment) -> Result<Valu
                 values.push(eval_expr(e, source, env)?);
             }
             Ok(Value::List(values))
+        },
+        Expr::Binary { left, op, right, span } => {
+            let l = eval_expr(*left, source, env)?;
+            let r = eval_expr(*right, source, env)?;
+            match (l, r) {
+                (Value::Number(a), Value::Number(b)) => {
+                    let result = match op {
+                        BinaryOp::Add => a + b,
+                        BinaryOp::Sub => a - b,
+                        BinaryOp::Mul => a * b,
+                        BinaryOp::Div => {
+                            if b == 0.0 {
+                                return Err(format_err(source, &span, "Division by zero"));
+                            }
+                            a / b
+                        }
+                    };
+                    Ok(Value::Number(result))
+                }
+                _ => Err(format_err(source, &span, "Binary operators require numeric operands")),
+            }
         },
         Expr::Call { func, args, kwargs, span } => {
             let function = env.get(&func).ok_or_else(|| {

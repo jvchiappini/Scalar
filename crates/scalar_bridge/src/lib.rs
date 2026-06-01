@@ -1,4 +1,5 @@
 pub mod math_eval;
+pub mod ratex_render;
 pub mod bindings;
 pub mod easing;
 
@@ -38,6 +39,19 @@ pub enum AnimationKind {
     /// 0→1 with fill transparent; phase 2 (60→100%) holds scale at 1 and fades fill in
     /// from transparent→original color. `from_scale` is lazily captured on first frame.
     DrawThenFill { from_scale: Option<f32>, fill_rgba: [f32; 4] },
+    /// Path-by-path progressive draw then fill reveal (for text/vector outlines).
+    /// Phase 1 (0–60% eased progress): shows sub-path segments one by one along the
+    /// outline. Phase 2 (60–100%): all segments visible, fill fades in.
+    PathDrawThenFill {
+        /// Entity IDs for each stroke segment sub-path (hidden initially).
+        segment_ids: Vec<u64>,
+        /// Target fill color (0–1 range).
+        fill_rgba: [f32; 4],
+        /// The main entity that holds the fill (hidden initially, no stroke).
+        fill_entity_id: u64,
+        /// First-frame initializer flag (sets fill transparent).
+        initialized: bool,
+    },
 }
 
 /// A registered animation entry.
@@ -101,6 +115,7 @@ impl Bridge {
         bindings::animation::register(env, self.renderer.clone(), self.line_data.clone(), self.animations.clone(), self.fonts.clone());
         bindings::primitives::register(env, self.renderer.clone(), self.line_data.clone(), self.animations.clone());
         bindings::imports::register(env, self.renderer.clone(), self.fonts.clone());
+        bindings::latex::register(env, self.renderer.clone(), self.fonts.clone());
     }
 
     /// Called before each frame render. Advances all active animations
@@ -162,6 +177,24 @@ impl Bridge {
                             );
                         }
                     }
+                    AnimationKind::Fade { from_opacity, .. } => {
+                        // Set initial opacity immediately (during the delay period,
+                        // the element should already be at from_opacity).
+                        let _ = renderer.set_opacity(
+                            NodeId(anim.node_id.into()),
+                            *from_opacity,
+                        );
+                    }
+                    AnimationKind::PathDrawThenFill { ref mut initialized, fill_rgba, fill_entity_id, .. } => {
+                        if !*initialized {
+                            *initialized = true;
+                            // Make fill transparent on the fill entity at start
+                            let _ = renderer.set_fill(
+                                NodeId(*fill_entity_id),
+                                [fill_rgba[0], fill_rgba[1], fill_rgba[2], 0.0],
+                            );
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -180,11 +213,18 @@ impl Bridge {
                 let _ = renderer.set_visible(NodeId(anim.node_id.into()), true);
             }
 
-            // Apply easing curve to the raw progress
-            let eased = easing::apply(&anim.easing, progress as f64) as f32;
+            // Only apply animation effects when progress > 0.
+            // At progress == 0, the element should stay in its default state
+            // (visible, full opacity, etc.). This is critical for animations
+            // whose delay exceeds the render duration — without this guard,
+            // FadeIn would set opacity to 0.0 on every frame and the element
+            // would remain permanently invisible.
+            if progress > 0.0 {
+                // Apply easing curve to the raw progress
+                let eased = easing::apply(&anim.easing, progress as f64) as f32;
 
-            // Dispatch by animation kind
-            match &anim.kind {
+                // Dispatch by animation kind
+                match &anim.kind {
                 AnimationKind::LineDraw => {
                     if let Some(data) = line_data.get(&anim.node_id) {
                         let end_x = data.x1 + (data.x2 - data.x1) * eased;
@@ -289,6 +329,41 @@ impl Bridge {
                         }
                     }
                 }
+                AnimationKind::PathDrawThenFill { segment_ids, fill_rgba, fill_entity_id, initialized: _ } => {
+                    const SPLIT: f32 = 0.6;
+                    if eased <= SPLIT {
+                        // Phase 1: reveal sub-path segments one by one along the outline.
+                        // The eased progress within this phase determines how many
+                        // segments are visible — they appear in traversal order.
+                        let seg_progress = (eased / SPLIT).min(1.0);
+                        let total = segment_ids.len();
+                        let num_to_show = if total == 0 {
+                            0
+                        } else {
+                            // Use floor() so each segment gets roughly equal time.
+                            // ceil() would jump from 0 to multiple segments in one frame.
+                            (seg_progress * total as f32).floor() as usize
+                        };
+                        for (i, sid) in segment_ids.iter().enumerate() {
+                            let _ = renderer.set_visible(NodeId(*sid), i < num_to_show);
+                        }
+                    } else {
+                        // Phase 2: all segments visible, fill fades in
+                        // Make the fill entity visible (it was hidden at creation)
+                        let _ = renderer.set_visible(NodeId(*fill_entity_id), true);
+                        let fill_t = ((eased - SPLIT) / (1.0 - SPLIT)).min(1.0);
+                        let alpha = fill_t * fill_rgba[3];
+                        let _ = renderer.set_fill(
+                            NodeId(*fill_entity_id),
+                            [fill_rgba[0], fill_rgba[1], fill_rgba[2], alpha],
+                        );
+                        // Ensure all stroke segments are visible
+                        for sid in segment_ids {
+                            let _ = renderer.set_visible(NodeId(*sid), true);
+                        }
+                    }
+                }
+                } // match &anim.kind
             }
 
             if progress < 1.0 {

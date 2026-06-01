@@ -1,29 +1,46 @@
 # Scalar Project Memory
 
 ## Last Session
-- **Date:** 2026-06-03
-- **Summary:** Fixed WriteText double-spacing bug (cursor_x already baked into path coords). Added `DrawThenFill` AnimationKind variant (two-phase scale-up + fill-fade). Added standalone `DrawThenFill()` function for any node. Added `RevealText()` — character-by-character draw-then-fill text reveal. Updated demo script and wiki docs.
-- **Changed files:**
-  - `crates/scalar_bridge/src/lib.rs` — Added `AnimationKind::DrawThenFill { from_scale, fill_rgba }` variant; added initial capture + two-phase dispatch in `before_frame` (phase 1: scale 0→1 at 0–60% progress, phase 2: fill fade at 60–100%)
-  - `crates/scalar_bridge/src/bindings/animation.rs` — Fixed WriteText double-spacing (removed cumulative advance offset from char_x); added `register_draw_then_fill()` (standalone DrawThenFill function); added `register_reveal_text()` (character-by-character draw-then-fill reveal); **BUG FIX**: `WriteText`/`RevealText` now read `x`/`y` from kwargs as fallback (not only positional args)
-  - `crates/scalar_bridge/src/bindings/imports.rs` — **BUG FIX**: `Text()` now reads `x`/`y` from kwargs as fallback
-  - `test_text_anim.scl` — Added RevealText demo section; updated duration hint from 12→14s
-  - `wiki/lang/animation.md` — Added RevealText and DrawThenFill sections with full kwarg tables and examples; added "How Animations Work" lifecycle section
-  - `wiki/bindings/animation_api.md` — Added DrawThenFill and RevealText API reference sections; updated implementation notes for DrawThenFill
-  - `wiki/lang/grammar_spec.md` — Added DrawThenFill and RevealText to animation function table
+- Date: 2026-06-01 (continued)
+- Summary: Implemented general-purpose `Animate()` dispatcher replacing old
+  line-draw-only version. Now `Animate(targets, "Effect", stagger: N, ...)` works
+  for all animation types (FadeIn, FadeOut, Grow, Shrink, DrawThenFill, MoveTo,
+  LineDraw) with automatic per-element stagger. No for-loops needed.
+- Changed files:
+  - `crates/scalar_lang/src/lexer.rs` — NEW tokens: `Plus`, `Star`, `Slash`
+  - `crates/scalar_lang/src/ast.rs` — NEW: `Expr::Binary { left, op, right, span }`,
+    `BinaryOp` enum (Add, Sub, Mul, Div), `Stmt::ForEach { var, list, body, span }`,
+    `Stmt::Assign { name, value, span }`
+  - `crates/scalar_lang/src/parser.rs` — NEW: `for x in list { }` branch (decided by
+    presence of `..` after `in expr`), `assign_stmt` (ident = expr), binary operator
+    parsing with precedence (multiplicative before additive)
+  - `crates/scalar_lang/src/eval/eval_expr.rs` — NEW: `Expr::Binary` evaluator
+    with numeric arithmetic
+  - `crates/scalar_lang/src/eval/eval_stmt.rs` — NEW: `Stmt::ForEach` and
+    `Stmt::Assign` evaluators. 7 new unit tests for assign, binary ops, for-each.
+  - `crates/scalar_bridge/src/ratex_render.rs` — NEW: `render_math_split()`
+    returns `Vec<Vec<PathCommand>>` — one group per RaTeX DisplayItem.
+    `convert_item()` helper handles one item (shared by both flat and split).
+    `display_list_to_item_paths()` wraps iteration with shared face_cache.
+    `last_point()` helper for QuadTo→CubicTo conversion.
+    Renamed `parse_and_layout` as shared step. Added 4 unit tests for split mode.
+  - `crates/scalar_bridge/src/bindings/latex.rs` — CHANGED: `Tex()` now calls
+    `render_math_split()` and spawns one shape per item, returning `Value::List(ids)`.
+  - `wiki/lang/grammar_spec.md` — Updated `Tex()` return type from `NodeId` to `[NodeId]`.
+  - `wiki/lang/text.md` — Updated Tex section: new return type, per-glyph animation examples.
+  - `wiki/lang/syntax.md` — Updated for-loop doc: both range and list forms. Added note about
+    `+`, `-`, `*`, `/` binary operators and assignment statements.
+  - `test_text_anim.scl` — Sections 12-16 rewritten to use `for part in expr { ... }`
+    pattern with staggered delays for per-glyph Manim-style animation.
 
 ## Open TODOs
-- [ ] Download code and test on Windows PC with `test_text_anim.scl` (GPU required)
-- [ ] Verify WriteText spacing is correct (no double spacing)
-- [ ] Verify RevealText draw-then-fill visual effect
+- [ ] Test on Windows PC with `test_text_anim.scl` — verify RevealText fill, segment_subdivisions, and ALL Tex() expressions including matrices
+- [ ] Add caching by expression string in `latex.rs` (currently re-parses/layouts every call)
+- [ ] Consider adding a `Tex()` color argument for formula color (currently uses fill kwarg only)
 - [ ] Profile CPU hot spots: `sync_ecs_to_shape_batcher`, `before_frame`, `animator_system.run()`
-- [ ] Run `test_anim.scl` and compare perf before/after
 - [ ] Consider `--release` profile for benchmarking (debug mode is 10-50× slower for CPU work)
 - [ ] Add coverage for composite glyphs (font parser handles composites, but test with accented chars)
 - [ ] Consider adding kerning support for Text() (currently uses only advance width)
-- [ ] Consider adding SVG `<rect>`, `<circle>`, `<ellipse>` element support in SVGImport
-- [ ] Consider adding multiline text support (newline handling) to Text()
-- [ ] Consider adding `TransformCharacters(source_ids, target_ids)` to morph one text into another
 
 ## Key Decisions
 

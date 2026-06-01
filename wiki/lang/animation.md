@@ -8,7 +8,7 @@ Functions for animating lines, shapes, and text.
 
 | Function | Target | Effect |
 |----------|--------|--------|
-| `Animate` | Lines | Line-draw reveal (progress 0→1) |
+| `Animate` | Any node/list | Universal animation dispatcher with per-element stagger |
 | `SetLineProgress` | Lines | Immediate line endpoint interpolation |
 | `SetLineCap` | Lines | Change line cap style |
 | `FadeIn` | Any node | Opacity 0 → 1 |
@@ -64,38 +64,76 @@ Changes the line cap style.
 
 ---
 
-## Animate
+## Animate — Universal Animation Dispatcher
+
+The professional, Manim-style way to animate any node or list of nodes. `Animate()`
+handles per-element stagger automatically — **no for-loops needed**.
+
+### Basic Signatures
 
 ```scalar
-Animate(lines: [id, ...], per_line: 1.0, staggered: true, easing: "ease_out_cubic")
-```
+// Single element animation
+Animate(target, "FadeIn", duration: 1.0, delay: 0.0)
+Animate(target, "FadeOut", duration: 1.0)
+Animate(target, "Grow", duration: 1.0)
+Animate(target, "Shrink", duration: 1.0)
+Animate(target, "DrawThenFill", duration: 1.0, fill: [r,g,b,a])
+Animate(target, "MoveTo", x: 100, y: 200, duration: 1.0)
 
-Registers a line-draw animation with easing. Each line draws from start to end over the specified duration. When `staggered` is true (default), lines animate sequentially — each one starts after the previous one finishes.
+// List with per-element stagger (like Manim's Write)
+Animate(parts, "FadeIn", duration: 0.25, stagger: 0.08)
+
+// Line-draw animation (backward compat — effect defaults to "LineDraw")
+Animate(line_id, duration: 1.0)
+Animate(lines: [id, ...], per_line: 0.5, staggered: true)
+```
 
 ### Kwargs
 
 | Kwarg | Type | Default | Description |
 |-------|------|---------|-------------|
-| `lines` | `[NodeId]` | (required) | Lines to animate |
-| `per_line` | Number | `1.0` | Duration per line (seconds) |
-| `duration` | Number | — | Total duration (alternative to `per_line`) |
-| `staggered` | Boolean | `true` | If `true`, lines animate sequentially |
+| `effect` | String | `"LineDraw"` | Animation effect name (2nd positional arg) |
+| `duration` | Number | `1.0` | Animation duration in seconds |
+| `delay` | Number | `0.0` | Global delay before animation starts |
+| `stagger` | Number | `0.0` | Per-element delay increment (for list targets) |
 | `easing` | String | `"ease_out_cubic"` | Easing function name |
+| `fill` | [r,g,b,a] | — | Target fill color (required for `DrawThenFill`) |
+| `x` | Number | — | Target x position (required for `MoveTo`) |
+| `y` | Number | — | Target y position (required for `MoveTo`) |
+
+### Effect Reference
+
+| Effect | Extra Kwargs | Description |
+|--------|-------------|-------------|
+| `"FadeIn"` | — | Opacity 0 → 1 |
+| `"FadeOut"` | — | Opacity 1 → 0 |
+| `"Grow"` | — | Scale 0 → 1 |
+| `"Shrink"` | — | Scale 1 → 0 |
+| `"DrawThenFill"` | `fill: [r,g,b,a]` | Phase 1: scale up outline; Phase 2: fill fades in |
+| `"MoveTo"` | `x: N, y: N` | Slide position from current → (x, y) |
+| `"LineDraw"` | — | Line endpoint draw (for `Line()` objects) |
 
 ### Examples
 
 ```scalar
-// Single line
-let l = Line(-200, 0, 200, 0, 10, cap: "square")
-Animate(lines: [l], per_line: 2.0)
+// === Per-glyph LaTeX Write (Manim-style) ===
+// The 'stagger' kwarg adds per-element delay automatically
+let parts = Tex("E = mc^2", x: 0, y: 0, fill: [0.3, 0.6, 1, 1])
+Animate(parts, "FadeIn", duration: 0.25, stagger: 0.08, delay: 0.5)
 
-// Multiple sequential lines
-let a = Line(-300, 0, 300, 0, 20, 1, 0, 0)
-let b = Line(0, -200, 0, 200, 20, 0, 1, 0)
+// === DrawThenFill with stagger ===
+let eq = Tex("\\int f(x) dx", x: 0, y: 0, fill: [1, 0.4, 0.4, 1])
+Animate(eq, "DrawThenFill", duration: 0.4, stagger: 0.1, fill: [1, 0.4, 0.4, 1])
+
+// === Simple shape ===
+let ball = Circle(0, 0, 30, fill: [1, 0.8, 0, 1])
+Animate(ball, "Grow", duration: 1.0, easing: "ease_out_back")
+Animate(ball, "MoveTo", x: 200, y: 0, duration: 1.5, delay: 1.2)
+
+// === Line draw (backward compat) ===
+let a = Line(-300, 0, 300, 0, 20, fill: [1, 0, 0, 1])
+let b = Line(0, -200, 0, 200, 20, fill: [0, 1, 0, 1])
 Animate(lines: [a, b], per_line: 1.5, staggered: true)
-
-// Multiple parallel lines
-Animate(lines: [a, b], per_line: 2.0, staggered: false, easing: "ease_out_bounce")
 ```
 
 ---
@@ -211,6 +249,7 @@ Returns a **list** of NodeIds, one per rendered character.
 | `size` | Number | `48` | Font size in pixels |
 | `duration` | Number | `1.0` | Total animation duration (all characters) |
 | `per_char` | Number | — | Duration per character (overrides `duration`) |
+| `delay` | Number | `0.0` | Global delay before the text starts appearing |
 | `easing` | String | `"ease_out_cubic"` | Easing for character fade-in |
 | `fill` | [r,g,b,a] | `[1,1,1,1]` | Fill color |
 | `stroke` | [r,g,b,a] | — | Stroke color (no stroke if omitted) |
@@ -226,6 +265,7 @@ let f = FontImport("Roboto-Regular.ttf")
 let chars = WriteText("Hello!", 0, 0,
     font: f, size: 48,
     duration: 2.0,
+    delay: 1.0,         // wait 1s before starting
     easing: "ease_out_bounce",
     fill: [0.3, 0.6, 1, 1])
 ```
@@ -254,9 +294,13 @@ This means each character can be individually animated — you can fade out only
 RevealText(str, x, y, font: 0, size: 48, duration: 1.0, ...kwargs) -> [NodeId, ...]
 ```
 
-Renders text character-by-character with a **"draw then fill"** reveal — similar to Manim's `DrawBorderThenFill`. Each character first scales from 0→1 (stroke visible, fill transparent), then fill fades from transparent to its original color.
+Renders text character-by-character with a **path-by-path draw-then-fill** reveal — similar to Manim's `DrawBorderThenFill`. For each character:
 
-Returns a **list** of NodeIds, one per rendered character.
+1. The outline path is broken into individual draw segments (each `LineTo`, `CubicTo`, `ClosePath`)
+2. **Phase 1** (0–60% of eased progress): stroke segments appear one by one along the outline, like a pen tracing the character
+3. **Phase 2** (60–100%): all segments are visible, fill fades in from transparent → original color
+
+Returns a **list** of NodeIds, one per rendered character (the fill entity ID).
 
 ### RevealText Kwargs
 
@@ -266,10 +310,12 @@ Returns a **list** of NodeIds, one per rendered character.
 | `size` | Number | `48` | Font size in pixels |
 | `duration` | Number | `1.0` | Total animation duration (all characters) |
 | `per_char` | Number | — | Duration per character (overrides `duration`) |
+| `delay` | Number | `0.0` | Global delay before the text starts drawing |
 | `easing` | String | `"ease_out_cubic"` | Easing for character draw-then-fill |
 | `fill` | [r,g,b,a] | `[1,1,1,1]` | Fill color |
 | `stroke` | [r,g,b,a] | — | Stroke color (no stroke if omitted) |
 | `stroke_width` | Number | `2.0` | Stroke thickness |
+| `segment_subdivisions` | Number | `1` | Split each path segment into N sub-segments for smoother progressive drawing (4–8 recommended for fonts) |
 | `opacity` | Number | `1.0` | Global opacity |
 | `z_index` | Number | `0` | Z-order |
 | `rotation` | Number | `0` | Rotation in degrees |
@@ -284,15 +330,17 @@ let chars = RevealText("Hello!", 0, 0,
     easing: "ease_out_bounce",
     fill: [0.3, 0.6, 1, 1],
     stroke: [0.2, 0.2, 0.2, 1],
-    stroke_width: 1.5)
+    stroke_width: 1.5,
+    segment_subdivisions: 6)  // smoother outline draw for thin characters
 ```
 
-The returned list can be chained with other animations:
+### How It Works
 
-```scalar
-// Fade out the entire revealed text
-FadeOut(chars, duration: 1.0, easing: "ease_in_cubic")
-```
+Internally, each character becomes **multiple entities**:
+- One **fill entity** (full path, fill only, no stroke) — hidden initially
+- N **stroke segment entities** (one per path segment, stroke only, no fill) — hidden initially
+
+The `PathDrawThenFill` animation shows segments one by one during phase 1, then fades in the fill during phase 2.
 
 ---
 

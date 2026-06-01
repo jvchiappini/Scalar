@@ -588,3 +588,123 @@ impl ttf_parser::OutlineBuilder for GlyphPathBuilder {
         self.cmds.push(PathCommand::Close);
     }
 }
+
+/// Breaks a sequence of path commands into individual drawable segments.
+///
+/// Each segment is a mini-path consisting of `MoveTo(start) {Command}` that can be
+/// rendered as a stroked sub-path. Segments are in traversal order — showing them
+/// one by one creates a "drawing" effect where the outline traces along the path.
+///
+/// Handles `MoveTo` (contour separators), `LineTo`, `CubicTo`, and `Close`.
+/// `Close` is emitted as an explicit `LineTo` back to the contour start so it
+/// becomes a visible segment.
+pub fn extract_path_segments(commands: &[PathCommand]) -> Vec<Vec<PathCommand>> {
+    let mut segments: Vec<Vec<PathCommand>> = Vec::new();
+    let mut contour_start: Option<Vec2> = None;
+    let mut pos: Option<Vec2> = None;
+
+    for cmd in commands {
+        match *cmd {
+            PathCommand::MoveTo(p) => {
+                // New contour — MoveTo itself is not a drawn segment
+                contour_start = Some(p);
+                pos = Some(p);
+            }
+            PathCommand::LineTo(p) => {
+                if let Some(start) = pos {
+                    segments.push(vec![
+                        PathCommand::MoveTo(start),
+                        PathCommand::LineTo(p),
+                    ]);
+                }
+                pos = Some(p);
+            }
+            PathCommand::CubicTo(c1, c2, p) => {
+                if let Some(start) = pos {
+                    segments.push(vec![
+                        PathCommand::MoveTo(start),
+                        PathCommand::CubicTo(c1, c2, p),
+                    ]);
+                }
+                pos = Some(p);
+            }
+            PathCommand::Close => {
+                if let (Some(cur), Some(first)) = (pos, contour_start) {
+                    if cur != first {
+                        segments.push(vec![
+                            PathCommand::MoveTo(cur),
+                            PathCommand::LineTo(first),
+                        ]);
+                    }
+                }
+                pos = contour_start;
+            }
+        }
+    }
+
+    segments
+}
+
+/// Evaluates a cubic Bézier at parameter `t` (0..=1) and returns the point.
+fn eval_cubic_bezier(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: f32) -> Vec2 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let mt = 1.0 - t;
+    let mt2 = mt * mt;
+    let mt3 = mt2 * mt;
+    p0 * mt3 + p1 * (3.0 * mt2 * t) + p2 * (3.0 * mt * t2) + p3 * t3
+}
+
+/// Subdivides a list of path segments into smaller sub-segments using
+/// straight-line approximation.
+///
+/// Each original segment in `segments` (e.g. `[MoveTo(start), CubicTo(c1,c2,end)]`)
+/// is split into `subdivisions` equal pieces. Cubic curves are evaluated at evenly
+/// spaced parameter values; line segments are split linearly.
+///
+/// `subdivisions` must be >= 1. A value of 1 returns the input unchanged.
+pub fn subdivide_segments(segments: &[Vec<PathCommand>], subdivisions: u32) -> Vec<Vec<PathCommand>> {
+    if subdivisions <= 1 {
+        return segments.to_vec();
+    }
+    let mut result: Vec<Vec<PathCommand>> = Vec::new();
+    let n = subdivisions as f32;
+    for segment in segments {
+        if segment.len() < 2 {
+            result.push(segment.clone());
+            continue;
+        }
+        match &segment[1] {
+            PathCommand::LineTo(end) => {
+                if let PathCommand::MoveTo(start) = segment[0] {
+                    for i in 0..subdivisions {
+                        let t0 = i as f32 / n;
+                        let t1 = (i + 1) as f32 / n;
+                        let p0 = start.lerp(*end, t0);
+                        let p1 = start.lerp(*end, t1);
+                        result.push(vec![
+                            PathCommand::MoveTo(p0),
+                            PathCommand::LineTo(p1),
+                        ]);
+                    }
+                }
+            }
+            PathCommand::CubicTo(c1, c2, end) => {
+                if let PathCommand::MoveTo(start) = segment[0] {
+                    for i in 0..subdivisions {
+                        let t0 = i as f32 / n;
+                        let t1 = (i + 1) as f32 / n;
+                        let p0 = eval_cubic_bezier(start, *c1, *c2, *end, t0);
+                        let p1 = eval_cubic_bezier(start, *c1, *c2, *end, t1);
+                        result.push(vec![
+                            PathCommand::MoveTo(p0),
+                            PathCommand::LineTo(p1),
+                        ]);
+                    }
+                }
+            }
+            _ => result.push(segment.clone()),
+        }
+    }
+    result
+}

@@ -16,7 +16,29 @@ pub enum Token {
 
     #[regex(r#""([^"\\]|\\.)*""#, |lex| {
         let s = lex.slice();
-        Some(s[1..s.len()-1].to_string())
+        let inner = &s[1..s.len()-1];
+        // Process escape sequences: \\ → \, \" → ", \n → newline, etc.
+        let mut result = String::with_capacity(inner.len());
+        let mut chars = inner.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                match chars.next() {
+                    Some('\\') => result.push('\\'),
+                    Some('"') => result.push('"'),
+                    Some('n') => result.push('\n'),
+                    Some('r') => result.push('\r'),
+                    Some('t') => result.push('\t'),
+                    Some(c) => {
+                        result.push('\\');
+                        result.push(c);
+                    }
+                    None => result.push('\\'),
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+        Some(result)
     })]
     String(String),
 
@@ -47,6 +69,12 @@ pub enum Token {
     Dot,
     #[token("-")]
     Minus,
+    #[token("+")]
+    Plus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
     #[token(";")]
     Semi,
     #[token(":")]

@@ -3,12 +3,27 @@ use std::ops::Range;
 pub type Span = Range<usize>;
 
 #[derive(Debug, Clone)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Number(f64, Span),
     Ident(String, Span),
     String(String, Span),
     UnaryMinus(Box<Expr>, Span),
     List(Vec<Expr>, Span),
+    /// Binary operation: left op right
+    Binary {
+        left: Box<Expr>,
+        op: BinaryOp,
+        right: Box<Expr>,
+        span: Span,
+    },
     /// Method call: target.method(args)
     MethodCall {
         target: Box<Expr>,
@@ -34,6 +49,7 @@ impl Expr {
             Expr::String(_, s) => s.clone(),
             Expr::UnaryMinus(_, s) => s.clone(),
             Expr::List(_, s) => s.clone(),
+            Expr::Binary { span, .. } => span.clone(),
             Expr::MethodCall { span, .. } => span.clone(),
             Expr::Call { span, .. } => span.clone(),
         }
@@ -56,6 +72,17 @@ pub enum Stmt {
     },
     Expr(Expr),
     Import(String, Span),
+    ForEach {
+        var: String,
+        list: Expr,
+        body: Vec<Stmt>,
+        span: Span,
+    },
+    Assign {
+        name: String,
+        value: Expr,
+        span: Span,
+    },
 }
 
 /// Abstract Syntax Tree node for Scalar.

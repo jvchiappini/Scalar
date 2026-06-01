@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use scalar_lang::{Environment, Value};
 use ferrous_engine::{Renderer, NodeId};
 use crate::{LineData, AnimationEntry, AnimationKind};
-use crate::bindings::imports::{FontEntry, glyph_paths_for_text};
+use crate::bindings::imports::{FontEntry, glyph_paths_for_text, extract_path_segments, subdivide_segments};
 use crate::bindings::shapes::{self, num, kwarg_num};
 
 pub fn register(
@@ -168,15 +168,41 @@ fn register_set_line_progress(
     );
 }
 
-// ─── Animate (line draw) ──────────────────────────────────────────────────────
+// ─── Animate (general-purpose) ──────────────────────────────────────────────
 
-/// Animate(id, duration: 1.0)
-/// Animate(lines: [id1, id2, ...], per_line: 1.0, staggered: true)
+/// Universal animation dispatcher — Manim-style professional animation.
 ///
-/// Registers a line-draw animation. Each line draws from start to end over
-/// the specified duration. When `staggered` is true (default), lines animate
-/// sequentially — each one starts after the previous one finishes.
-/// When `staggered` is false, all lines animate in parallel.
+/// # Signatures
+///
+/// ```scalar
+/// // Animate a single element
+/// Animate(target, "FadeIn", duration: 1.0, delay: 0.0)
+/// Animate(target, "FadeOut", duration: 1.0)
+/// Animate(target, "Grow", duration: 1.0)
+/// Animate(target, "Shrink", duration: 1.0)
+/// Animate(target, "DrawThenFill", duration: 1.0, fill: [r,g,b,a])
+/// Animate(target, "MoveTo", x: 100, y: 200, duration: 1.0)
+///
+/// // Animate a list of elements with staggered per-glyph timing
+/// Animate(parts, "FadeIn", duration: 0.25, stagger: 0.08, delay: 19.5)
+/// Animate(parts, "DrawThenFill", duration: 0.4, stagger: 0.1, fill: [1,0.4,0.4,1])
+///
+/// // Line-draw animation (backward compat: effect defaults to "LineDraw")
+/// Animate(line_id, duration: 1.0)
+/// Animate(lines: [id1, id2, ...], per_line: 0.5, staggered: true)
+/// ```
+///
+/// # Effect Reference
+///
+/// | Effect | Kwargs | Description |
+/// |--------|--------|-------------|
+/// | `FadeIn` | — | Opacity 0→1 |
+/// | `FadeOut` | — | Opacity 1→0 |
+/// | `Grow` | — | Scale 0→1 |
+/// | `Shrink` | — | Scale 1→0 |
+/// | `DrawThenFill` | `fill: [r,g,b,a]` | Phase 1: draw outline, Phase 2: fill |
+/// | `MoveTo` | `x: N, y: N` | Translate to (x, y) |
+/// | `LineDraw` | — | Animate line endpoint from stored LineData |
 fn register_animate(
     env: &mut Environment,
     renderer: Rc<RefCell<Renderer>>,
@@ -189,7 +215,16 @@ fn register_animate(
     env.define(
         "Animate".to_string(),
         Value::NativeFunction(Rc::new(move |args, kwargs: HashMap<String, Value>| {
+            // ── Parse targets (NodeId or [NodeId]) ─────────────────────
             let node_ids: Vec<u64> = if let Some(Value::List(list)) = kwargs.get("lines") {
+                // Backward compat: lines: kwarg (old-style line draw)
+                list.iter().filter_map(|v| match v {
+                    Value::NodeId(id) => Some(*id as u64),
+                    Value::Number(n) => Some(*n as u64),
+                    _ => None,
+                }).collect()
+            } else if let Some(Value::List(list)) = args.get(0) {
+                // First positional is a List of NodeIds
                 list.iter().filter_map(|v| match v {
                     Value::NodeId(id) => Some(*id as u64),
                     Value::Number(n) => Some(*n as u64),
@@ -200,57 +235,163 @@ fn register_animate(
             } else if let Some(Value::Number(n)) = args.get(0) {
                 vec![*n as u64]
             } else {
-                return Err("Animate: first argument must be a NodeId or use lines: [id1, id2, ...]".to_string());
+                return Err(
+                    "Animate(target, \"Effect\", ...): first argument must be a \
+                     NodeId or [NodeId] (or use `lines: [id, ...]` for backward compat)"
+                    .to_string(),
+                );
             };
 
             if node_ids.is_empty() {
                 return Err("Animate: no valid node IDs provided".to_string());
             }
 
-            let staggered = match kwargs.get("staggered") {
+            // ── Parse effect name ──────────────────────────────────────
+            // Second positional arg is the effect name (String).
+            // If absent, default to "LineDraw" for backward compat.
+            let effect = match args.get(1) {
+                Some(Value::String(s)) => s.clone(),
+                _ => "LineDraw".to_string(),
+            };
+
+            // ── Parse standard animation kwargs ────────────────────────
+            let params = parse_anim_params(&kwargs);
+            let duration = params.duration;
+            let delay = params.delay;
+            let easing = params.easing;
+            let stagger = match kwargs.get("stagger") {
+                Some(Value::Number(n)) => *n,
+                _ => 0.0,
+            };
+
+            // ── Backward compat for old-style line draw ────────────────
+            // Old `Animate(lines: [...], per_line: N, staggered: true/false)`
+            let per_line_override = match kwargs.get("per_line") {
+                Some(Value::Number(n)) => Some(*n),
+                _ => None,
+            };
+            let use_staggered = match kwargs.get("staggered") {
                 Some(Value::Boolean(b)) => *b,
                 _ => true,
             };
 
-            let easing_name = match kwargs.get("easing") {
-                Some(Value::String(s)) => crate::easing::Easing::from_str(s),
-                _ => crate::easing::Easing::EaseOutCubic,
+            let eff_duration = per_line_override.unwrap_or(duration);
+
+            // Compute per-element delay: if explicit stagger > 0 use it;
+            // otherwise for old-style use per_line or duration/count.
+            let per_item_delay = |i: usize| -> f64 {
+                if stagger > 0.0 {
+                    delay + i as f64 * stagger
+                } else if effect == "LineDraw" && (per_line_override.is_some() || use_staggered) {
+                    if use_staggered { i as f64 * eff_duration } else { 0.0 }
+                } else {
+                    delay
+                }
             };
 
-            let per_line_dur = match kwargs.get("per_line") {
-                Some(Value::Number(n)) => *n,
-                _ => match kwargs.get("duration") {
-                    Some(Value::Number(n)) => *n / node_ids.len() as f64,
-                    _ => 1.0,
-                },
-            };
-
-            // Hide all lines before animation begins
-            {
+            // ── Validate LineDraw targets ──────────────────────────────
+            if effect == "LineDraw" {
+                let ld_map = ld.borrow();
+                for nid in &node_ids {
+                    if !ld_map.contains_key(nid) {
+                        return Err(format!(
+                            "Animate(..., \"LineDraw\"): node {} is not a tracked line. \
+                             Lines must be created with `Line(x1, y1, x2, y2, ...)`",
+                            nid
+                        ));
+                    }
+                }
+                // Hide all lines (they'll be revealed during animation)
                 let mut r = ren.borrow_mut();
                 for nid in &node_ids {
-                    if !ld.borrow().contains_key(nid) {
-                        return Err(format!("Animate: node {} is not a tracked line", nid));
-                    }
                     let _ = r.set_visible(NodeId(*nid), false);
                 }
             }
 
+            // ── Parse effect-specific kwargs ───────────────────────────
+            let fill_rgba = match kwargs.get("fill") {
+                Some(Value::List(vals)) if vals.len() == 4 => {
+                    let mut rgba = [0.0f32; 4];
+                    for (i, v) in vals.iter().enumerate() {
+                        if let Value::Number(n) = v {
+                            rgba[i] = *n as f32;
+                        }
+                    }
+                    Some(rgba)
+                }
+                _ => None,
+            };
+
+            let to_x = match kwargs.get("x") {
+                Some(Value::Number(n)) => Some(*n as f32),
+                _ => None,
+            };
+            let to_y = match kwargs.get("y") {
+                Some(Value::Number(n)) => Some(*n as f32),
+                _ => None,
+            };
+
+            // ── Push animation entries ─────────────────────────────────
             let mut anims = an.borrow_mut();
+
             for (i, nid) in node_ids.iter().enumerate() {
-                let delay = if staggered {
-                    i as f64 * per_line_dur
-                } else {
-                    0.0
+                let item_delay = per_item_delay(i);
+
+                let kind: AnimationKind = match effect.as_str() {
+                    "FadeIn" => AnimationKind::Fade {
+                        from_opacity: 0.0,
+                        to_opacity: 1.0,
+                    },
+                    "FadeOut" => AnimationKind::Fade {
+                        from_opacity: 1.0,
+                        to_opacity: 0.0,
+                    },
+                    "Grow" => AnimationKind::Scale {
+                        from: None,
+                        to: 1.0,
+                    },
+                    "Shrink" => AnimationKind::Scale {
+                        from: None,
+                        to: 0.0,
+                    },
+                    "DrawThenFill" => {
+                        let rgba = fill_rgba.unwrap_or([1.0, 1.0, 1.0, 1.0]);
+                        AnimationKind::DrawThenFill {
+                            from_scale: None,
+                            fill_rgba: rgba,
+                        }
+                    }
+                    "MoveTo" => {
+                        let x = to_x.unwrap_or(0.0);
+                        let y = to_y.unwrap_or(0.0);
+                        AnimationKind::MoveTo {
+                            from_x: None,
+                            from_y: None,
+                            to_x: x,
+                            to_y: y,
+                        }
+                    }
+                    "LineDraw" => AnimationKind::LineDraw,
+                    other => {
+                        return Err(format!(
+                            "Animate: unknown effect '{other}'. \
+                             Available effects: FadeIn, FadeOut, Grow, Shrink, \
+                             DrawThenFill, MoveTo, LineDraw"
+                        ));
+                    }
                 };
+
+                let was_hidden = effect == "LineDraw";
+
+                let entry_duration = per_line_override.unwrap_or(duration);
                 anims.push(AnimationEntry {
                     node_id: *nid,
-                    duration: per_line_dur,
-                    delay,
+                    duration: entry_duration,
+                    delay: item_delay,
                     start_time: None,
-                    easing: easing_name,
-                    kind: AnimationKind::LineDraw,
-                    was_hidden: true,
+                    easing,
+                    kind,
+                    was_hidden,
                 });
             }
 
@@ -602,12 +743,17 @@ fn register_write_text(
                 }
             };
 
+            // Read global delay from kwargs (all chars shifted by this amount)
+            let global_delay = kwarg_num(&kwargs, "delay", 0.0);
+
             // Build kwargs for each character (skip font/size/position, pass through rest)
             let mut char_kwargs = kwargs.clone();
             char_kwargs.remove("font");
             char_kwargs.remove("size");
             char_kwargs.remove("duration");
             char_kwargs.remove("per_char");
+            char_kwargs.remove("delay");
+            char_kwargs.remove("segment_subdivisions");
             char_kwargs.remove("easing");
             char_kwargs.remove("x");
             char_kwargs.remove("y");
@@ -626,7 +772,7 @@ fn register_write_text(
                 let _ = r.set_visible(NodeId(id as u64), false);
 
                 // Register a fade-in animation for this character
-                let delay = i as f64 * per_char_dur;
+                let delay = global_delay + i as f64 * per_char_dur;
                 an.borrow_mut().push(AnimationEntry {
                     node_id: id as u64,
                     duration: per_char_dur,
@@ -652,12 +798,13 @@ fn register_write_text(
 
 /// RevealText(str, x, y, font: 0, size: 48, duration: 1.0, ...kwargs)
 ///
-/// Renders text character-by-character with a "draw then fill" reveal animation.
-/// Each character first scales from 0→1 (stroke visible, fill transparent), then
-/// fill fades in from transparent → original color. Similar to Manim's
-/// `DrawBorderThenFill`.
+/// Renders text character-by-character with a path-by-path draw-then-fill reveal.
+/// For each character, the outline path is broken into individual segments
+/// (LineTo, CubicTo, Close). Phase 1 draws these segments one by one along the
+/// outline (like a pen tracing the character). Phase 2 fades the fill in.
+/// Similar to Manim's `DrawBorderThenFill`.
 ///
-/// Returns a `List` of NodeIds (one per character).
+/// Returns a `List` of NodeIds (one per character — the fill entity ID).
 ///
 /// Kwargs are identical to WriteText:
 /// | Kwarg | Type | Default | Description |
@@ -734,17 +881,22 @@ fn register_reveal_text(
                 }
             };
 
+            // Read global delay from kwargs (all chars shifted by this amount)
+            let global_delay = kwarg_num(&kwargs, "delay", 0.0);
+
             // Build kwargs for each character (skip font/size/position, pass through rest)
             let mut char_kwargs = kwargs.clone();
             char_kwargs.remove("font");
             char_kwargs.remove("size");
             char_kwargs.remove("duration");
             char_kwargs.remove("per_char");
+            char_kwargs.remove("delay");
+            char_kwargs.remove("segment_subdivisions");
             char_kwargs.remove("easing");
             char_kwargs.remove("x");
             char_kwargs.remove("y");
 
-            // Extract fill color for the DrawThenFill animation (values are 0–1 range)
+            // Extract fill color (values are 0–1 range)
             let fill_color: [f32; 4] = match kwargs.get("fill") {
                 Some(Value::List(vals)) if vals.len() >= 3 => [
                     num(Some(&vals[0])) as f32,
@@ -752,9 +904,8 @@ fn register_reveal_text(
                     num(Some(&vals[2])) as f32,
                     if vals.len() >= 4 { num(Some(&vals[3])) as f32 } else { 1.0 },
                 ],
-                _ => [1.0, 1.0, 1.0, 1.0], // default white
+                _ => [1.0, 1.0, 1.0, 1.0],
             };
-            // Apply global opacity to fill alpha
             let global_opacity = kwarg_num(&kwargs, "opacity", 1.0) as f32;
             let fill_rgba = [fill_color[0], fill_color[1], fill_color[2], fill_color[3] * global_opacity];
 
@@ -762,29 +913,56 @@ fn register_reveal_text(
             let mut node_ids: Vec<Value> = Vec::with_capacity(glyphs.len());
 
             for (i, glyph) in glyphs.iter().enumerate() {
-                // cursor_x is baked into path coordinates, spawn all at (x, y)
-                let sk = shapes::parse_shape_kwargs(&char_kwargs);
-                let id = shapes::spawn_2d_shape_with_kwargs(&mut r, x, y, glyph.commands.clone(), &sk);
+                // Break the glyph outline into individual drawable segments,
+                // then subdivide for smoother progressive drawing.
+                let segment_subdivisions = kwarg_num(&kwargs, "segment_subdivisions", 1.0) as u32;
+                let raw_segments = extract_path_segments(&glyph.commands);
+                let segments = subdivide_segments(&raw_segments, segment_subdivisions);
 
-                // Hide it initially — will be revealed by the DrawThenFill animation
-                let _ = r.set_visible(NodeId(id as u64), false);
+                // ── Fill entity ──
+                // Spawn the full path with fill only (no stroke), hidden initially
+                let mut fill_ent_kwargs = char_kwargs.clone();
+                fill_ent_kwargs.remove("stroke");
+                fill_ent_kwargs.remove("stroke_width");
+                fill_ent_kwargs.remove("cap");
+                let sk_fill = shapes::parse_shape_kwargs(&fill_ent_kwargs);
+                let fill_id = shapes::spawn_2d_shape_with_kwargs(
+                    &mut r, x, y, glyph.commands.clone(), &sk_fill,
+                );
+                let _ = r.set_visible(NodeId(fill_id as u64), false);
 
-                // Register a DrawThenFill animation for this character
-                let delay = i as f64 * per_char_dur;
+                // ── Stroke segment entities ──
+                // Each segment is a stroke-only sub-path, hidden initially
+                let mut seg_kwargs = char_kwargs.clone();
+                seg_kwargs.insert("fill".to_string(), Value::List(vec![])); // explicit no-fill
+                let sk_seg = shapes::parse_shape_kwargs(&seg_kwargs);
+                let mut seg_ids: Vec<u64> = Vec::with_capacity(segments.len());
+                for seg_cmds in &segments {
+                    let seg_id = shapes::spawn_2d_shape_with_kwargs(
+                        &mut r, x, y, seg_cmds.clone(), &sk_seg,
+                    );
+                    let _ = r.set_visible(NodeId(seg_id as u64), false);
+                    seg_ids.push(seg_id as u64);
+                }
+
+                // Register a PathDrawThenFill animation for this character
+                let delay = global_delay + i as f64 * per_char_dur;
                 an.borrow_mut().push(AnimationEntry {
-                    node_id: id as u64,
+                    node_id: fill_id as u64, // primary node for reference
                     duration: per_char_dur,
                     delay,
                     start_time: None,
                     easing: easing_name,
-                    kind: AnimationKind::DrawThenFill {
-                        from_scale: None, // lazily captured on first frame
+                    kind: AnimationKind::PathDrawThenFill {
+                        segment_ids: seg_ids,
                         fill_rgba,
+                        fill_entity_id: fill_id as u64,
+                        initialized: false,
                     },
-                    was_hidden: true,
+                    was_hidden: false, // all visibility managed by PathDrawThenFill dispatch
                 });
 
-                node_ids.push(Value::NodeId(id));
+                node_ids.push(Value::NodeId(fill_id));
             }
 
             Ok(Value::List(node_ids))
